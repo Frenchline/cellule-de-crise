@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b0f16">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>NÉGOCIATEUR — Cellule de crise</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="rain" aria-hidden="true"></canvas>
+  <div id="gyro" aria-hidden="true"></div>
+  <div id="grain" aria-hidden="true"></div>
+  <div id="flash" aria-hidden="true"></div>
+
+  <main id="app" class="col">
+
+    <!-- ============ ACCUEIL ============ -->
+    <section class="screen" id="scr-home">
+      <div class="home-inner">
+        <div class="home-badge">CELLULE DE CRISE — LIGNE SÉCURISÉE</div>
+        <h1 class="home-title">NÉGOCIATEUR</h1>
+        <p class="home-sub">Une ligne ouverte. Des vies au bout.</p>
+        <button class="btn btn-primary btn-big" id="btn-start">Toucher pour commencer</button>
+        <button class="btn btn-small" id="btn-rules-home">Règles du jeu</button>
+        <p class="home-note">Jeu solo · textes réservés à un public adulte</p>
+      </div>
+    </section>
+
+    <!-- ============ DOSSIER NÉGOCIATEUR ============ -->
+    <section class="screen" id="scr-agent">
+      <div class="panel-inner">
+        <h2 class="screen-title">Dossier du négociateur</h2>
+        <div class="paper">
+          <p class="paper-label">FICHE D'AFFECTATION — BRIGADE DE NÉGOCIATION</p>
+          <label class="field">
+            <span>Nom de code / Nom</span>
+            <input id="agent-name" type="text" maxlength="24" placeholder="ex. « Doc », Keller, Faure…" autocomplete="off">
+          </label>
+          <p class="paper-hint">Ce nom signera vos rapports d'intervention.</p>
+        </div>
+        <div class="row-btns">
+          <button class="btn" id="btn-agent-back">Retour</button>
+          <button class="btn btn-primary" id="btn-agent-ok">Prendre le poste</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ QG ============ -->
+    <section class="screen" id="scr-hq">
+      <div class="panel-inner">
+        <header class="hq-head">
+          <div>
+            <h2 class="screen-title">QG — Cellule de crise</h2>
+            <div class="hq-agent" id="hq-agent-line"></div>
+          </div>
+          <div class="hq-controls">
+            <button class="icon-btn" id="btn-rules-hq" title="Règles">?</button>
+            <button class="icon-btn" id="btn-mute" title="Son">🔊</button>
+          </div>
+        </header>
+
+        <div class="hud-strip" id="hq-stats"></div>
+
+        <div id="stress-warning" class="stress-warning hidden"></div>
+
+        <h3 class="section-title">Missions</h3>
+        <div id="hq-missions" class="missions"></div>
+
+        <h3 class="section-title">Compétences <span id="hq-skillpoints" class="skillpoints"></span></h3>
+        <div id="hq-skills" class="skills"></div>
+
+        <h3 class="section-title">Réglages</h3>
+        <div class="settings-row">
+          <label class="setting"><span>Volume</span>
+            <input type="range" id="set-volume" min="0" max="100" step="5">
+          </label>
+          <label class="setting"><span>Pluie</span>
+            <input type="checkbox" id="set-rain">
+          </label>
+          <label class="setting"><span>Flash mort</span>
+            <input type="checkbox" id="set-flash">
+          </label>
+          <label class="setting"><span>Illustrations</span>
+            <input type="checkbox" id="set-illus">
+          </label>
+        </div>
+
+        <h3 class="section-title">Système</h3>
+        <div class="row-btns wrap">
+          <button class="btn btn-small" id="btn-resume" hidden>Reprendre la partie en cours</button>
+          <button class="btn btn-small" id="btn-rest">Repos (−2 stress, +1 jour)</button>
+          <button class="btn btn-small" id="btn-reset">Réinitialiser la campagne</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ BRIEFING ============ -->
+    <section class="screen" id="scr-brief">
+      <div class="panel-inner">
+        <div class="paper briefing" id="brief-paper"></div>
+        <h3 class="section-title">Options de partie <span class="muted">(multiplicateurs de score)</span></h3>
+        <div id="brief-options" class="options"></div>
+        <div class="row-btns">
+          <button class="btn" id="btn-brief-back">Retour</button>
+          <button class="btn btn-primary" id="btn-brief-go">Ouvrir la ligne</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PARTIE ============ -->
+    <section class="screen" id="scr-game">
+      <header id="game-hud"></header>
+      <div id="counters" class="counters hidden"></div>
+      <div id="phase-banner"></div>
+      <div id="scene-bar">
+        <canvas id="scene-canvas" class="sb-bg" width="224" height="64"></canvas>
+        <div class="sb-veil"></div>
+        <div class="sb-med"><canvas id="scene-med" width="32" height="32"></canvas></div>
+        <div class="sb-id">
+          <div class="sb-name" id="scene-name">—</div>
+          <div class="sb-mood" id="scene-mood">—</div>
+        </div>
+        <div class="sb-hud"><span class="sb-rec">● REC</span><span id="sb-clock">00:00:00</span></div>
+        <div class="sb-cam">CAM 02</div>
+      </div>
+      <div id="transcript" class="transcript" aria-live="polite"></div>
+      <div id="dice-zone" class="dice-zone"></div>
+      <div id="hand" class="hand"></div>
+      <nav id="game-tabs">
+        <button data-tab="marche">Marché</button>
+        <button data-tab="equipe">Équipe</button>
+        <button data-tab="dossier">Dossier</button>
+        <button data-tab="demandes">Demandes</button>
+        <button id="btn-endphase" class="btn-endphase">Fin de phase</button>
+        <button id="btn-rules-game" title="Règles">?</button>
+      </nav>
+      <div id="tab-panel" class="tab-panel hidden"></div>
+      <div id="tuto-overlay" class="tuto-overlay hidden">
+        <div class="tuto-box">
+          <div id="tuto-text"></div>
+          <div class="row-btns">
+            <button class="btn btn-small" id="btn-tuto-skip">Passer le tutoriel</button>
+            <button class="tuto-skiplink" id="btn-tuto-step">Passer l'étape ›</button>
+            <button class="btn btn-primary btn-small" id="btn-tuto-next">Compris</button>
+          </div>
+        </div>
+      </div>
+      <div id="card-modal" class="modal hidden"></div>
+      <div id="choice-modal" class="choice-modal hidden"></div>
+      <div id="vig-overlay" class="vig-overlay hidden"></div>
+    </section>
+
+    <!-- ============ DÉBRIEFING ============ -->
+    <section class="screen" id="scr-debrief">
+      <div class="panel-inner">
+        <div class="paper debrief" id="debrief-paper"></div>
+        <div class="row-btns">
+          <button class="btn btn-primary" id="btn-debrief-ok">Retour au QG</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ GALERIE (debug) ============ -->
+    <section class="screen" id="scr-gallery">
+      <div class="panel-inner" id="gallery-body"></div>
+    </section>
+
+  </main>
+  <div id="rules-modal" class="rules-modal hidden"></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

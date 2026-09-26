@@ -1,0 +1,95 @@
+// Tests campagne — localStorage mocké
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as CAM from '../js/campaign.js';
+import { MISSION_LIST } from '../js/data/missions/index.js';
+
+function mockStorage() {
+  const m = new Map();
+  return {
+    getItem: k => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => m.set(k, String(v)),
+    removeItem: k => m.delete(k),
+  };
+}
+
+CAM.setStorage(mockStorage());
+
+test('campagne : création, sauvegarde, rechargement', () => {
+  const c = CAM.defaultCampaign();
+  c.agentName = 'Doc';
+  c.xp = 150;
+  CAM.saveCampaign(c);
+  const c2 = CAM.loadCampaign();
+  assert.equal(c2.agentName, 'Doc');
+  assert.equal(c2.xp, 150);
+});
+
+test('rangs par paliers XP', () => {
+  assert.equal(CAM.getRank(0).rank.name, 'Stagiaire');
+  assert.equal(CAM.getRank(300).rank.name, 'Négociateur');
+  assert.equal(CAM.getRank(750).rank.name, 'Négociateur principal');
+  assert.equal(CAM.getRank(1300).rank.name, 'Chef de cellule');
+  assert.equal(CAM.getRank(5000).rank.name, 'Légende du RAID');
+});
+
+test('recordResult : XP, victoire, stress', () => {
+  CAM.setStorage(mockStorage());
+  const c = CAM.defaultCampaign();
+  c.agentName = 'X';
+  const scoreInfo = { score: 800, grade: 'A', xp: 80 };
+  const r = CAM.recordResult(c, 'tutoriel', 'surrender', scoreInfo, { killed: 0, freed: 3, remaining: 0, total: 3 });
+  assert.equal(c.xp, 80);
+  assert.equal(c.missions.tutoriel.wins, 1);
+  assert.equal(c.missions.tutoriel.finished, true);
+  assert.equal(c.stress, 0); // -1 sans mort
+  const r2 = CAM.recordResult(c, 'braquage', 'defeat', scoreInfo, { killed: 4, freed: 0, remaining: 0, total: 6 });
+  assert.equal(c.stress, 5); // 4 tués +2 défaite, cap 5
+  // stress ≥ 3 → repos
+  CAM.restDay(c);
+  assert.equal(c.stress, 3);
+  CAM.restDay(c);
+  assert.equal(c.stress, 1);
+});
+
+test('déblocage : classiques après le tutoriel', () => {
+  const c = CAM.defaultCampaign();
+  assert.equal(CAM.missionUnlocked(c, 'braquage'), false);
+  CAM.recordResult(c, 'tutoriel', 'surrender', { score: 100, grade: 'D', xp: 10 }, { killed: 0 });
+  assert.equal(CAM.missionUnlocked(c, 'braquage'), true);
+});
+
+test('points de compétence à la montée de rang', () => {
+  const c = CAM.defaultCampaign();
+  c.xp = 290;
+  CAM.recordResult(c, 'tutoriel', 'surrender', { score: 500, grade: 'B', xp: 50 }, { killed: 0 });
+  assert.equal(c.skillPoints, 1); // 340 XP → rang Négociateur
+  assert.equal(CAM.learnSkill(c, 'voix_posee'), true);
+  assert.equal(CAM.learnSkill(c, 'voix_posee'), false); // déjà apprise
+});
+
+test('sauvegarde/reprise de partie', () => {
+  CAM.setStorage(mockStorage());
+  const fake = { version: 1, missionId: 'braquage', turn: 3, pc: 2 };
+  CAM.saveGame(fake);
+  const s = CAM.loadGame();
+  assert.equal(s.missionId, 'braquage');
+  assert.equal(s.turn, 3);
+  CAM.clearGame();
+  assert.equal(CAM.loadGame(), null);
+});
+
+test('déblocage : scénarios avancés après les 2 classiques gagnées', () => {
+  const c = CAM.defaultCampaign();
+  const unlocked = () => CAM.missionUnlocked(c, 'secte', MISSION_LIST);
+  assert.equal(unlocked(), false); // tutoriel pas fini
+  CAM.recordResult(c, 'tutoriel', 'surrender', { score: 100, grade: 'D', xp: 10 }, { killed: 0 });
+  assert.equal(unlocked(), false); // classiques pas finies
+  CAM.recordResult(c, 'braquage', 'defeat', { score: 10, grade: 'D', xp: 1 }, { killed: 2 });
+  CAM.recordResult(c, 'hopital', 'surrender', { score: 100, grade: 'D', xp: 10 }, { killed: 0 });
+  assert.equal(unlocked(), false); // braquage = défaite, pas de win
+  CAM.recordResult(c, 'braquage', 'liberation', { score: 500, grade: 'B', xp: 50 }, { killed: 0 });
+  assert.equal(unlocked(), true);
+  assert.equal(CAM.missionUnlocked(c, 'prison', MISSION_LIST), true);
+  assert.equal(CAM.missionUnlocked(c, 'ferry', MISSION_LIST), true);
+});

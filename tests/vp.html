@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!-- Harnais viewport pour les tests/captures headless :
+     la fenêtre headless est bornée à ≥500px de large ; l'iframe donne à
+     l'application un innerWidth/innerHeight exacts (ex. 360×640).
+     Usage : tests/vp.html?w=390&h=844&src=/?debug%23auto:tutocheck
+     Le <pre id="tutocheck"> de l'iframe est recopié dans le document parent
+     (id="tutocheck-outer") pour être lisible via --dump-dom. -->
+<html><head><meta charset="utf-8"><style>
+  html,body{margin:0;padding:0;background:#000}
+  iframe{border:0;display:block}
+</style></head><body>
+<iframe id="app"></iframe>
+<script>
+  const q = new URLSearchParams(location.search);
+  const w = parseInt(q.get('w') || '390', 10), h = parseInt(q.get('h') || '844', 10);
+  const f = document.getElementById('app');
+  f.width = w; f.height = h;
+  f.src = q.get('src') || '/';
+  f.addEventListener('load', () => {
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      try {
+        const p = f.contentDocument && f.contentDocument.getElementById('tutocheck');
+        if (p && !document.getElementById('tutocheck-outer')) {
+          const pre = document.createElement('pre');
+          pre.id = 'tutocheck-outer';
+          pre.textContent = p.textContent;
+          document.body.appendChild(pre);
+          clearInterval(iv);
+        }
+      } catch (e) { /* cross-origin impossible en même origine */ }
+      if (Date.now() - t0 > 25000) clearInterval(iv);
+    }, 300);
+  });
+</script>
+</body></html>

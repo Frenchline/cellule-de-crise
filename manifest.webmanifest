@@ -1,0 +1,15 @@
+{
+  "name": "NÉGOCIATEUR — Cellule de crise",
+  "short_name": "Négociateur",
+  "description": "Jeu de négociation de prise d'otage en solo. Cellule de crise, ligne ouverte.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07090d",
+  "theme_color": "#0b0f16",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
