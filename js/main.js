@@ -20,7 +20,7 @@ let game = null;            // état moteur courant
 let logCursor = 0;          // nb d'entrées de log déjà rendues
 let optsSel = {};           // options cochées au briefing
 let pendingMission = null;
-let chronoTimer = null, chronoLeft = 60;
+let chronoTimer = null, chronoLeft = 60, chronoTurn = -1;
 let tutoIndex = -1;
 
 // Hauteur réelle du viewport (dvh incertain sur mobile) → variable CSS --app-h
@@ -421,6 +421,10 @@ function doPlayCard(cardId, targetId, useReroll) {
 }
 
 function afterAction() {
+  // nouvelle phase de conversation (tour suivant, après un choix) → relance le chrono.
+  // chronoTimer peut survivre <1 s à la sortie de conversation (intervalle pas encore
+  // tické) : on vérifie aussi le tour, sinon le chrono repartirait avec le temps restant.
+  if (game.phase === 'conversation' && (!chronoTimer || chronoTurn !== game.turn)) startChrono();
   syncGameUI();
   refreshOpenTab();
   persistGame();
@@ -462,6 +466,7 @@ function startChrono() {
   stopChrono();
   if (!game.options.chrono || game.phase !== 'conversation' || game.result) return;
   chronoLeft = 60;
+  chronoTurn = game.turn;
   chronoTimer = setInterval(() => {
     if (!game || game.result || game.phase !== 'conversation') { stopChrono(); return; }
     if (cutOpen()) return;          // le chrono ne tourne pas pendant une cinématique
@@ -850,6 +855,7 @@ if ('serviceWorker' in navigator) {
       return;
     }
     if (mode === 'tutocheck') { runTutoCheck(); return; }
+    if (mode === 'chronocheck') { runChronoCheck(); return; }
     if (mode.startsWith('vig:')) {
       // vignette persistante pour capture (pas d'auto-dismiss)
       pendingMission = 'braquage'; launchMission();
@@ -973,6 +979,90 @@ function renderCutGallery() {
   }
   host.append(row);
   UI.showScreen('scr-gallery');
+}
+
+// ---------------- vérification automatisée du chrono ----------------
+// ?debug#auto:chronocheck : relances du chrono à chaque phase conversation,
+// timeout (menace +1, phase marché), pause pendant une cinématique,
+// et relance après un choix en mission avancée. Rapport JSON → <pre id="chronocheck">.
+async function runChronoCheck() {
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const R = { ok: true };
+  const fail = (k, info) => { R.ok = false; R[k] = info; };
+  campaign.settings.illus = false;              // pas de cinématique/vignette auto pendant le check
+  const launch = (id) => { pendingMission = id; optsSel = { chrono: true }; launchMission(); };
+  const endPhase = () => { E.endPhase(game); afterAction(); };
+  // avance jusqu'à la prochaine phase de conversation (sort d'abord si on y est)
+  const drain = () => {
+    let g = 0;
+    if (game.phase === 'conversation') endPhase();
+    while (!game.result && game.phase !== 'conversation' && g++ < 20) {
+      if (game.phase === 'choice') { E.chooseOption(game, 0); afterAction(); }
+      else endPhase();
+    }
+  };
+
+  try {
+    // (1) tour 1 : le chrono décompte
+    launch('braquage');
+    const a0 = chronoLeft;
+    await sleep(2100);
+    if (!(chronoLeft < a0)) fail('t1', { a0, a1: chronoLeft });
+
+    // (2) tour complet → tour 2 : chrono relancé à 60 et décompte
+    drain();
+    if (!(game.phase === 'conversation' && chronoTimer && chronoLeft === 60)) {
+      fail('t2restart', { phase: game.phase, timer: !!chronoTimer, left: chronoLeft });
+    }
+    await sleep(2100);
+    if (!(chronoLeft < 60)) fail('t2count', { left: chronoLeft });
+
+    // (3) timeout : menace +1, phase marché, relance au tour suivant
+    const th = game.threat;
+    chronoLeft = 2;
+    await sleep(3200);
+    if (!(game.threat === th + 1 && game.phase === 'market')) {
+      fail('timeout', { was: th, threat: game.threat, phase: game.phase });
+    }
+    drain();
+    if (!(game.phase === 'conversation' && chronoTimer)) fail('t3restart', { phase: game.phase, timer: !!chronoTimer });
+
+    // (4) pause pendant une cinématique, reprise à la fermeture
+    const before = chronoLeft;
+    showCutscene([{ art: 'lunette', lines: ['Test de pause.'] }], null, 0, true);
+    await sleep(2100);
+    const frozen = chronoLeft === before;
+    closeCutscene();
+    await sleep(2100);
+    if (!frozen) fail('cutpause', { before, during: chronoLeft });
+    if (!(chronoLeft < before)) fail('cutresume', { before, after: chronoLeft });
+
+    // (5) mission avancée : après un choix, si phase conversation le chrono tourne.
+    // La seed est aléatoire → on retente jusqu'à atteindre un choix.
+    let tries = 0;
+    while (tries++ < 8 && !(game && game.phase === 'choice')) {
+      launch('secte');
+      let guard = 0;
+      while (game.phase !== 'choice' && !game.result && guard++ < 300) {
+        if (game.phase === 'conversation') {
+          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
+          if (cid) { E.playCard(game, cid, null); afterAction(); } else endPhase();
+        } else endPhase();
+      }
+    }
+    if (game.phase === 'choice') {
+      E.chooseOption(game, 0);
+      afterAction();
+      if (game.phase === 'conversation' && !chronoTimer) {
+        fail('choice', { phase: game.phase, timer: !!chronoTimer });
+      }
+      R.afterChoice = { phase: game.phase, timer: !!chronoTimer, left: chronoLeft };
+    } else R.choiceSkipped = game.phase;
+  } catch (e) { fail('exception', String(e && e.stack || e)); }
+  const pre = document.createElement('pre');
+  pre.id = 'chronocheck';
+  pre.textContent = JSON.stringify(R);
+  document.body.append(pre);
 }
 
 // ---------------- vérification automatisée du tutoriel ----------------
