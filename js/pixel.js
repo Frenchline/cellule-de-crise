@@ -39,14 +39,14 @@ export const PAL = {
   R: '#a8552f',   // roux
 };
 
-// ---------------- primitives ----------------
-function G(w, h) { return Array.from({ length: h }, () => new Array(w).fill('.')); }
-function px(g, x, y, c) { if (y >= 0 && y < g.length && x >= 0 && x < g[0].length) g[y][x] = c; }
-function rect(g, x, y, w, h, c) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) px(g, i, j, c); }
-function hl(g, x, y, n, c) { for (let i = 0; i < n; i++) px(g, x + i, y, c); }
-function vl(g, x, y, n, c) { for (let i = 0; i < n; i++) px(g, x, y + i, c); }
-function rows(g) { return g.map(r => r.join('')); }
-function sprite(g) { return { w: g[0].length, h: g.length, rows: rows(g), palette: PAL }; }
+// ---------------- primitives (exportées pour pixelcut.js) ----------------
+export function G(w, h) { return Array.from({ length: h }, () => new Array(w).fill('.')); }
+export function px(g, x, y, c) { if (y >= 0 && y < g.length && x >= 0 && x < g[0].length) g[y][x] = c; }
+export function rect(g, x, y, w, h, c) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) px(g, i, j, c); }
+export function hl(g, x, y, n, c) { for (let i = 0; i < n; i++) px(g, x + i, y, c); }
+export function vl(g, x, y, n, c) { for (let i = 0; i < n; i++) px(g, x, y + i, c); }
+export function rows(g) { return g.map(r => r.join('')); }
+export function sprite(g) { return { w: g[0].length, h: g.length, rows: rows(g), palette: PAL }; }
 
 // mini-font 3×5 pour « +N » dans les scènes
 const FONT = {
@@ -67,7 +67,7 @@ function glyph(g, ch, x, y, c) {
   if (!f) return;
   f.forEach((r, j) => r.split('').forEach((b, i) => { if (b === '1') px(g, x + i, y + j, c); }));
 }
-function drawText(g, txt, x, y, c) { txt.split('').forEach((ch, i) => glyph(g, ch, x + i * 4, y, c)); }
+export function drawText(g, txt, x, y, c) { txt.split('').forEach((ch, i) => glyph(g, ch, x + i * 4, y, c)); }
 
 // ---------------- rendu canvas ----------------
 const rgbCache = {};
@@ -617,7 +617,7 @@ function vigBase(c1, c2) {
   return g;
 }
 
-function vigFigure(g, x, y, c) {
+export function vigFigure(g, x, y, c) {
   // silhouette debout ~7×16
   rect(g, x + 2, y, 4, 4, c);          // tête
   rect(g, x, y + 4, 8, 8, c);          // buste

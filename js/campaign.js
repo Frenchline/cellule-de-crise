@@ -32,7 +32,7 @@ export function defaultCampaign() {
     stress: 0,
     day: 1,
     missions: {}, // id -> {plays, wins, bestScore, bestGrade, finished}
-    settings: { mute: false, volume: 0.7, rain: true, flash: true },
+    settings: { mute: false, volume: 0.7, rain: true, flash: true, music: true },
   };
 }
 
@@ -130,7 +130,7 @@ export function clearGame() {
 export function loadSettings() {
   const raw = get(KEY_SETTINGS);
   if (raw) { try { return JSON.parse(raw); } catch { } }
-  return { mute: false, volume: 0.7, rain: true, flash: true };
+  return { mute: false, volume: 0.7, rain: true, flash: true, music: true };
 }
 
 export function saveSettings(s) {

@@ -700,3 +700,90 @@ body.in-game { overflow: hidden; }
   .sb-rec { animation: none; }
   .tuto-box { transition: none; }
 }
+
+/* ---------- teinte de menace (bords seulement) ---------- */
+#threat-tint {
+  position: fixed; inset: 0; z-index: 30; pointer-events: none; display: none;
+}
+body[data-tt="3"] #threat-tint {
+  display: block;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255,180,84,.11) 100%);
+}
+body[data-tt="4"] #threat-tint {
+  display: block;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(255,180,84,.20) 100%);
+}
+body[data-tt="5"] #threat-tint {
+  display: block;
+  background: radial-gradient(ellipse at center, transparent 46%, rgba(226,59,59,.32) 100%);
+  animation: ttpulse 2.4s ease-in-out infinite;
+}
+body[data-tt="6"] #threat-tint {
+  display: block;
+  background: radial-gradient(ellipse at center, transparent 42%, rgba(226,59,59,.44) 100%);
+  animation: ttpulse 1.5s ease-in-out infinite;
+}
+body[data-tt="7"] #threat-tint {
+  display: block;
+  background: radial-gradient(ellipse at center, transparent 38%, rgba(226,59,59,.55) 100%);
+  animation: ttpulse .95s ease-in-out infinite;
+}
+@keyframes ttpulse { 50% { opacity: .45; } }
+/* légère désaturation de l'écran de jeu au point de rupture */
+body[data-tt="7"] #game-hud, body[data-tt="7"] #counters, body[data-tt="7"] #phase-banner,
+body[data-tt="7"] #scene-bar, body[data-tt="7"] #transcript, body[data-tt="7"] #dice-zone,
+body[data-tt="7"] #hand, body[data-tt="7"] #game-tabs {
+  filter: saturate(.78);
+}
+/* flash rouge de bord à la montée de menace */
+#threat-tint.tt-flash { display: block; animation: ttflash .45s ease-out; }
+@keyframes ttflash {
+  0% { box-shadow: inset 0 0 60px 18px rgba(226,59,59,.65); }
+  100% { box-shadow: inset 0 0 60px 18px rgba(226,59,59,0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #threat-tint { animation: none !important; }
+}
+
+/* ---------- cinématiques plein écran ---------- */
+.cut-overlay {
+  position: fixed; inset: 0; z-index: 73; background: #030409;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding-bottom: 6vh;
+}
+.cut-overlay.hidden { display: none; }
+.cut-stage {
+  position: relative; width: 100%; display: flex; justify-content: center;
+}
+#cut-canvas {
+  width: 100%; max-width: 560px; image-rendering: pixelated;
+  max-height: calc(var(--app-h, 100dvh) * 0.62); object-fit: contain;
+  background: #000;
+}
+.cut-scan {
+  position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+}
+.cut-dialog {
+  width: min(92%, 460px); margin-top: 14px; position: relative;
+  background: #0b0f16;
+  border: 2px solid var(--amber-dim); box-shadow: 0 0 0 2px #0b0f16, 0 0 0 4px var(--amber-dim);
+  border-radius: 4px;
+  padding: 12px 14px; min-height: 72px;
+}
+#cut-text {
+  font-family: var(--mono); font-size: 15px; line-height: 1.55; color: var(--ink);
+  white-space: pre-wrap;
+}
+.cut-next {
+  position: absolute; right: 10px; bottom: 6px; color: var(--amber);
+  font-family: var(--mono); font-size: 12px; animation: cutblink .8s steps(2) infinite;
+}
+@keyframes cutblink { 50% { opacity: 0; } }
+#btn-cut-skip {
+  position: absolute; top: calc(10px + var(--safe-t)); right: 10px; z-index: 2;
+  opacity: .8;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cut-next { animation: none; }
+}

@@ -88,6 +88,9 @@
           <label class="setting"><span>Illustrations</span>
             <input type="checkbox" id="set-illus">
           </label>
+          <label class="setting"><span>Musique</span>
+            <input type="checkbox" id="set-music">
+          </label>
         </div>
 
         <h3 class="section-title">Système</h3>
@@ -107,6 +110,7 @@
         <div id="brief-options" class="options"></div>
         <div class="row-btns">
           <button class="btn" id="btn-brief-back">Retour</button>
+          <button class="btn btn-small" id="btn-brief-intro" hidden>▶ Revoir l'intro</button>
           <button class="btn btn-primary" id="btn-brief-go">Ouvrir la ligne</button>
         </div>
       </div>
@@ -139,6 +143,7 @@
         <button id="btn-endphase" class="btn-endphase">Fin de phase</button>
         <button id="btn-rules-game" title="Règles">?</button>
       </nav>
+      <div id="threat-tint"></div>
       <div id="tab-panel" class="tab-panel hidden"></div>
       <div id="tuto-overlay" class="tuto-overlay hidden">
         <div class="tuto-box">
@@ -171,6 +176,17 @@
     </section>
 
   </main>
+  <div id="cut-overlay" class="cut-overlay hidden">
+    <div class="cut-stage">
+      <canvas id="cut-canvas"></canvas>
+      <div class="cut-scan"></div>
+    </div>
+    <div class="cut-dialog">
+      <div id="cut-text"></div>
+      <div class="cut-next">▼</div>
+    </div>
+    <button class="btn btn-small" id="btn-cut-skip">Passer ▶▶</button>
+  </div>
   <div id="rules-modal" class="rules-modal hidden"></div>
   <script type="module" src="js/main.js"></script>
 </body>

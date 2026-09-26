@@ -29,6 +29,7 @@ export function showScreen(id) {
   const scr = $('#' + id);
   if (scr) scr.classList.add('active');
   document.body.classList.toggle('in-game', id === 'scr-game');
+  if (id !== 'scr-game') document.body.removeAttribute('data-tt'); // teinte de menace = jeu seulement
   scr && scr.scrollTo(0, 0);
 }
 

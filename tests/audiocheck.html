@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- Harnais audio headless : vérifie que le séquenceur, les pistes,
+     la tension et le tic-tac ne lèvent aucune exception.
+     Usage : google-chrome --headless --autoplay-policy=no-user-gesture-required
+             --virtual-time-budget=6000 --dump-dom tests/audiocheck.html -->
+<html><head><meta charset="utf-8"></head><body>
+<script type="module">
+import * as AU from '../js/audio.js';
+const lines = [];
+let ok = true;
+const step = (name, fn) => { try { fn(); lines.push(`${name}:ok`); } catch (e) { ok = false; lines.push(`${name}:ERR ${e.message}`); } };
+try {
+  step('initAudio', () => AU.initAudio());
+  for (const m of ['menu', 'cinematique', 'game', null]) step(`setMusic:${m}`, () => AU.setMusic(m));
+  step('setTension:calme', () => AU.setTension({ threat: 1, deckLeft: 9, fog: false }));
+  step('setTension:tendu', () => AU.setTension({ threat: 4, deckLeft: 6, fog: false }));
+  step('setTension:danger', () => AU.setTension({ threat: 6, deckLeft: 3, fog: false }));
+  step('setTension:panique', () => AU.setTension({ threat: 7, deckLeft: 1, fog: false, chronoLeft: 8 }));
+  step('setTension:brouillard', () => AU.setTension({ threat: 7, deckLeft: 0, fog: true }));
+  step('setMusicEnabled', () => { AU.setMusicEnabled(false); AU.setMusicEnabled(true); });
+  step('sfx', () => { AU.playDice(); AU.playTerrorStinger(); AU.playGunshot(); AU.playChime(); AU.playSquelch(); });
+} catch (e) { ok = false; lines.push('FATAL ' + e.message); }
+setTimeout(() => {
+  const pre = document.createElement('pre');
+  pre.id = 'audiocheck';
+  pre.textContent = JSON.stringify({ ok, lines });
+  document.body.append(pre);
+}, 800);
+</script>
+</body></html>

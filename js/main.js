@@ -7,7 +7,9 @@ import * as UI from './ui.js';
 import * as CAM from './campaign.js';
 import * as AU from './audio.js';
 import * as PIX from './pixel.js';
+import * as CUT from './pixelcut.js';
 import { MISSION_LIST, getMission } from './data/missions/index.js';
+import { CUTSCENES, getIntro, pickCutscene } from './data/cutscenes.js';
 import { optionsMultiplier } from './data/options.js';
 
 const $ = UI.$, $$ = UI.$$;
@@ -46,11 +48,12 @@ function updateMuteBtn() {
 
 function syncSettingsUI() {
   const s = settings();
-  const vol = $('#set-volume'), rain = $('#set-rain'), flash = $('#set-flash'), illus = $('#set-illus');
+  const vol = $('#set-volume'), rain = $('#set-rain'), flash = $('#set-flash'), illus = $('#set-illus'), mus = $('#set-music');
   if (vol) vol.value = Math.round((s.volume ?? 0.7) * 100);
   if (rain) rain.checked = s.rain !== false;
   if (flash) flash.checked = s.flash !== false;
   if (illus) illus.checked = s.illus !== false;
+  if (mus) mus.checked = s.music !== false;
 }
 
 function illusOn() { return settings().illus !== false; }
@@ -117,6 +120,7 @@ function dismissVig() {
 
 function pumpVig() {
   if (vigBusy || !vigQueue.length) return;
+  if (cutOpen()) return;           // les cinématiques passent d'abord
   if (document.hidden) { vigQueue.length = 0; return; }
   vigBusy = true;
   const { kind, title } = vigQueue.shift();
@@ -161,6 +165,121 @@ function sfxFor(entry) {
   }
 }
 
+// ---------------- cinématiques pixel-art ----------------
+// Overlay plein écran : panneaux { art, lines }, machine à écrire,
+// tap = finir la ligne / ligne suivante / panneau suivant / fin.
+let cutPanels = null, cutPi = 0, cutLi = 0;
+let cutTyping = false, cutTypeTimer = null;
+let cutAnimTimer = null, cutFrame = 0, cutDoneCb = null;
+
+function cutOpen() { return cutPanels !== null; }
+
+function screenMusic() {
+  if ($('#scr-game').classList.contains('active')) return 'game';
+  if ($('#scr-brief').classList.contains('active')) return 'cinematique';
+  return 'menu';
+}
+
+function drawCutFrame() {
+  if (!cutPanels) return;
+  PIX.renderSprite($('#cut-canvas'), CUT.cutSprite(cutPanels[cutPi].art, cutFrame));
+}
+
+function cutShowLine(instant = false) {
+  const line = cutPanels[cutPi].lines[cutLi];
+  const txt = $('#cut-text');
+  if (instant || REDUCED.matches) { txt.textContent = line; cutTyping = false; return; }
+  txt.textContent = '';
+  cutTyping = true;
+  let i = 0;
+  cutTypeTimer = setInterval(() => {
+    i++;
+    txt.textContent = line.slice(0, i);
+    if (i >= line.length) { clearInterval(cutTypeTimer); cutTypeTimer = null; cutTyping = false; }
+  }, 22);
+}
+
+function cutAdvance() {
+  if (!cutPanels) return;
+  if (cutTyping) { // 1er tap : termine la ligne en cours
+    clearInterval(cutTypeTimer); cutTypeTimer = null; cutTyping = false;
+    $('#cut-text').textContent = cutPanels[cutPi].lines[cutLi];
+    return;
+  }
+  cutLi++;
+  if (cutLi >= cutPanels[cutPi].lines.length) {
+    cutPi++; cutLi = 0;
+    if (cutPi >= cutPanels.length) { closeCutscene(); return; }
+    cutFrame = 0;
+    drawCutFrame();
+  }
+  cutShowLine();
+}
+
+function showCutscene(panels, onDone = null, startPanel = 0, instant = false) {
+  if (!panels || !panels.length) { onDone && onDone(); return; }
+  cutPanels = panels; cutPi = startPanel; cutLi = 0; cutDoneCb = onDone;
+  cutFrame = 0;
+  $('#cut-overlay').classList.remove('hidden');
+  drawCutFrame();
+  cutShowLine(instant);
+  if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
+  if (!REDUCED.matches) cutAnimTimer = setInterval(() => { cutFrame++; drawCutFrame(); }, 125);
+  AU.setMusic('cinematique');
+}
+
+function closeCutscene() {
+  if (cutTypeTimer) { clearInterval(cutTypeTimer); cutTypeTimer = null; }
+  if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
+  cutPanels = null; cutTyping = false;
+  $('#cut-overlay').classList.add('hidden');
+  const cb = cutDoneCb; cutDoneCb = null;
+  AU.setMusic(screenMusic());
+  pumpVig();                       // la file de vignettes reprend
+  if (cb) cb();
+}
+
+$('#cut-overlay').addEventListener('click', () => cutAdvance());
+$('#btn-cut-skip').addEventListener('click', (e) => { e.stopPropagation(); closeCutscene(); });
+
+// cinématiques de milieu de partie : déclencheurs, une fois chacune.
+// Jamais pendant une vignette, jamais en mode auto, après le délai de frappe.
+function maybeCutscene() {
+  if (!saveEnabled || !illusOn() || !game) return;
+  if (game.result || game.phase === 'choice') return;
+  if (cutOpen() || vigBusy || vigQueue.length) return;
+  if (!game.cutsSeen) game.cutsSeen = [];
+  const c = pickCutscene(game, game.cutsSeen);
+  if (!c) return;
+  setTimeout(() => {
+    if (cutOpen() || !game || game.result || game.phase === 'choice') return;
+    if (vigBusy || vigQueue.length) return;
+    game.cutsSeen.push(c.key);
+    persistGame();
+    showCutscene(c.panels, null);
+  }, TYPEWRITER_DELAY);
+}
+
+// ---------------- teinte de menace ----------------
+let lastTintThreat = null;
+
+function flashTint() {
+  const el = $('#threat-tint');
+  el.classList.remove('tt-flash');
+  void el.offsetWidth;             // relance l'animation
+  el.classList.add('tt-flash');
+  setTimeout(() => el.classList.remove('tt-flash'), 500);
+}
+
+function syncThreatTint() {
+  const fog = !!(game && game.options && game.options.brouillard);
+  const lvl = (!game || fog) ? 0 : game.threat;
+  if (lastTintThreat != null && lvl > lastTintThreat && !fog && settings().flash) flashTint();
+  lastTintThreat = lvl;
+  if (lvl >= 1) document.body.dataset.tt = String(lvl);
+  else document.body.removeAttribute('data-tt');
+}
+
 // ---------------- boucle d'animation pixel (8 fps) ----------------
 let animTimer = null, animFrame = 0, missionStartMs = 0;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)');
@@ -203,6 +322,14 @@ function syncGameUI(instantLog = false) {
   UI.renderHand(game, onCardTap);
   UI.updateGyro(game.threat);
   AU.setThreat(game.threat);
+  AU.setTension({
+    threat: game.threat,
+    deckLeft: game.terrorDeck.length,
+    fog: !!(game.options && game.options.brouillard),
+    chronoLeft: (game.options.chrono && game.phase === 'conversation' && !game.result) ? chronoLeft : null,
+    over: !!game.result,
+  });
+  syncThreatTint();
   const entries = newLogEntries();
   UI.appendLogEntries(entries, {
     onEntry: sfxFor, flash: settings().flash, instant: instantLog,
@@ -227,6 +354,7 @@ function syncGameUI(instantLog = false) {
     });
   } else UI.closeChoiceModal();
   if (game.result) setTimeout(showDebrief, TYPEWRITER_DELAY);
+  maybeCutscene();
 }
 
 const TYPEWRITER_DELAY = 2400;
@@ -336,7 +464,9 @@ function startChrono() {
   chronoLeft = 60;
   chronoTimer = setInterval(() => {
     if (!game || game.result || game.phase !== 'conversation') { stopChrono(); return; }
+    if (cutOpen()) return;          // le chrono ne tourne pas pendant une cinématique
     chronoLeft--;
+    AU.setTension({ chronoLeft });
     UI.renderPhaseBanner(game, chronoLeft);
     if (chronoLeft <= 0) {
       stopChrono();
@@ -346,7 +476,7 @@ function startChrono() {
     }
   }, 1000);
 }
-function stopChrono() { if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; } chronoLeft = 60; }
+function stopChrono() { if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; } chronoLeft = 60; AU.setTension({ chronoLeft: null }); }
 
 // ---------------- tutoriel ----------------
 const TUTO_STEPS = [
@@ -371,7 +501,7 @@ function startTutorial() {
 
 function tutoSuspended() {
   // masque l'overlay tant qu'une surface modale est ouverte
-  return ['#card-modal', '#tab-panel', '#choice-modal', '#rules-modal', '#vig-overlay']
+  return ['#card-modal', '#tab-panel', '#choice-modal', '#rules-modal', '#vig-overlay', '#cut-overlay']
     .some(sel => { const e = $(sel); return e && !e.classList.contains('hidden'); });
 }
 
@@ -449,17 +579,25 @@ function maybeAdvanceTuto(kind, delay = 0) {
 // re-positionnement / ré-affichage quand les surfaces modales bougent
 addEventListener('resize', () => { if (tutoIndex >= 0) positionTutoBox(tutoTarget); });
 const tutoObserver = new MutationObserver(() => { if (tutoIndex >= 0) syncTutoVisibility(); });
-['#card-modal', '#tab-panel', '#choice-modal', '#rules-modal', '#vig-overlay'].forEach(sel => {
+['#card-modal', '#tab-panel', '#choice-modal', '#rules-modal', '#vig-overlay', '#cut-overlay'].forEach(sel => {
   const e = $(sel);
   if (e) tutoObserver.observe(e, { attributes: true, attributeFilter: ['class'] });
 });
 
 // ---------------- lancement d'une mission ----------------
+// Sélection au QG → cinématique d'intro (si illustrations) → briefing.
+function startIntroOrBriefing(missionId) {
+  const intro = (saveEnabled && illusOn()) ? getIntro(missionId) : null;
+  if (intro) showCutscene(intro, () => openBriefing(missionId));
+  else openBriefing(missionId);
+}
+
 function openBriefing(missionId) {
   pendingMission = missionId;
   optsSel = {};
   refreshBriefing();
   UI.showScreen('scr-brief');
+  AU.setMusic('cinematique');
 }
 
 function refreshBriefing() {
@@ -468,6 +606,7 @@ function refreshBriefing() {
     optsSel[id] = !optsSel[id];
     refreshBriefing();
   });
+  $('#btn-brief-intro').hidden = !(illusOn() && getIntro(pendingMission));
 }
 
 function launchMission() {
@@ -484,11 +623,13 @@ function launchMission() {
   moodEvent = null; moodHold = 0; resultVigShown = false;
   missionStartMs = Date.now(); animFrame = 0;
   vigQueue.length = 0; vigBusy = false;
+  lastTintThreat = null;
   UI.resetTranscript();
   UI.clearDice();
   $('#tab-panel').classList.add('hidden');
   applyIllusSettings();
   UI.showScreen('scr-game');
+  AU.setMusic('game');
   AU.playRing();
   syncGameUI();
   startChrono();
@@ -511,6 +652,7 @@ function showDebrief() {
   const rank = CAM.getRank(campaign.xp);
   UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn());
   UI.showScreen('scr-debrief');
+  AU.setMusic('menu');
   AU.playJingle(outcome !== 'defeat');
 }
 
@@ -521,7 +663,7 @@ function showHQ() {
   dismissVig();
   game = null;
   UI.renderHQ(campaign, MISSION_LIST, {
-    openMission: openBriefing,
+    openMission: startIntroOrBriefing,
     learn: (skillId) => { CAM.learnSkill(campaign, skillId); if (saveEnabled) CAM.saveCampaign(campaign); showHQ(); },
   });
   const save = CAM.loadGame();
@@ -533,6 +675,9 @@ function showHQ() {
   updateMuteBtn();
   syncSettingsUI();
   UI.showScreen('scr-hq');
+  AU.setMusic('menu');
+  AU.setThreat(1);
+  syncThreatTint();
 }
 
 function resumeGame() {
@@ -542,10 +687,12 @@ function resumeGame() {
   if (!game) return;
   logCursor = 0;
   missionStartMs = Date.now();
+  lastTintThreat = null;
   UI.resetTranscript();
   UI.clearDice();
   applyIllusSettings();
   UI.showScreen('scr-game');
+  AU.setMusic('game');
   syncGameUI(true);
   startChrono();
   startAnim();
@@ -554,6 +701,7 @@ function resumeGame() {
 // ---------------- navigation ----------------
 $('#btn-start').addEventListener('click', () => {
   AU.initAudio();
+  AU.setMusic('menu');
   campaign = CAM.loadCampaign();
   if (campaign && campaign.agentName) {
     showHQ();
@@ -582,6 +730,10 @@ $('#btn-mute').addEventListener('click', () => {
 
 $('#btn-brief-back').addEventListener('click', showHQ);
 $('#btn-brief-go').addEventListener('click', launchMission);
+$('#btn-brief-intro').addEventListener('click', () => {
+  const intro = getIntro(pendingMission);
+  if (intro) showCutscene(intro, null);
+});
 
 $('#set-volume').addEventListener('input', e => {
   AU.initAudio();
@@ -599,6 +751,11 @@ $('#set-flash').addEventListener('change', e => {
 $('#set-illus').addEventListener('change', e => {
   persistSettings({ illus: e.target.checked });
   applyIllusSettings();
+});
+$('#set-music').addEventListener('change', e => {
+  AU.initAudio();
+  persistSettings({ music: e.target.checked });
+  AU.setMusicEnabled(e.target.checked);
 });
 
 // bandeau scène : tap = replier / déplier (persisté)
@@ -659,6 +816,39 @@ if ('serviceWorker' in navigator) {
       showHQ(); return;
     }
     if (mode === 'gallery') { UI.renderGallery(); UI.showScreen('scr-gallery'); return; }
+    if (mode === 'cutgallery') { renderCutGallery(); return; }
+    if (mode.startsWith('cut:')) {
+      // #auto:cut:<missionId>:<intro|cléMid>[:<panneau>] — figé pour capture
+      const [, mid, key, pi] = mode.split(':');
+      showCutsceneDebug(mid, key, pi);
+      return;
+    }
+    if (mode.startsWith('flowgo:')) {
+      // chaîne complète : intro → « Passer » → briefing → « Ouvrir la ligne »
+      pendingMission = mode.slice(7);
+      showCutscene(getIntro(pendingMission), () => openBriefing(pendingMission), 0, true);
+      closeCutscene();
+      launchMission();
+      return;
+    }
+    if (mode.startsWith('midcut:')) {
+      // force une cinématique de milieu de partie : #auto:midcut:<id>:<clé>:<pas>
+      const parts = mode.slice(7).split(':');
+      pendingMission = parts[0];
+      launchMission();
+      const steps = parseInt(parts[2] || '0', 10);
+      for (let i = 0; i < steps && !game.result; i++) {
+        if (game.phase === 'choice') { E.chooseOption(game, 0); continue; }
+        if (game.phase === 'conversation') {
+          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
+          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
+        } else E.endPhase(game);
+      }
+      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
+      const m = (CUTSCENES[parts[0]].mid || []).find(c => c.key === parts[1]);
+      if (m) showCutscene(m.panels, null, 0, true);
+      return;
+    }
     if (mode === 'tutocheck') { runTutoCheck(); return; }
     if (mode.startsWith('vig:')) {
       // vignette persistante pour capture (pas d'auto-dismiss)
@@ -756,7 +946,34 @@ if ('serviceWorker' in navigator) {
     }
   }
   UI.showScreen('scr-home');
+  AU.setMusic('menu');
 })();
+
+// ---------------- cinématiques : hooks de débogage ----------------
+function showCutsceneDebug(mid, key, panelIndex) {
+  const def = CUTSCENES[mid];
+  if (!def) return;
+  const panels = key === 'intro' ? def.intro : (def.mid.find(c => c.key === key) || {}).panels;
+  if (!panels) return;
+  const p = Math.min(parseInt(panelIndex || '0', 10) || 0, panels.length - 1);
+  showCutscene(panels, null, p, true);   // lignes affichées entières, prêt pour capture
+}
+
+function renderCutGallery() {
+  const host = $('#gallery-body');
+  host.innerHTML = '';
+  host.append(UI.el('h3', null, 'ARTS DE CINÉMATIQUES — frame 0 / frame 3'));
+  const row = UI.el('div', 'gal-row wrap');
+  for (const id of CUT.CUT_ARTS) {
+    for (const f of [0, 3]) {
+      const cell = UI.el('div', 'gal-cell');
+      cell.append(PIX.spriteCanvas(CUT.cutSprite(id, f), 2), UI.el('div', 'gal-lbl', `${id} f${f}`));
+      row.append(cell);
+    }
+  }
+  host.append(row);
+  UI.showScreen('scr-gallery');
+}
 
 // ---------------- vérification automatisée du tutoriel ----------------
 // ?debug#auto:tutocheck : parcourt chaque étape, vérifie via elementFromPoint
