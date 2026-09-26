@@ -4,7 +4,8 @@
      l'application un innerWidth/innerHeight exacts (ex. 360×640).
      Usage : tests/vp.html?w=390&h=844&src=/?debug%23auto:tutocheck
      Le <pre id="tutocheck"> de l'iframe est recopié dans le document parent
-     (id="tutocheck-outer") pour être lisible via --dump-dom. -->
+     (id="tutocheck-outer") pour être lisible via --dump-dom ;
+     idem pour <pre id="layoutcheck"> → id="layoutcheck-outer". -->
 <html><head><meta charset="utf-8"><style>
   html,body{margin:0;padding:0;background:#000}
   iframe{border:0;display:block}
@@ -20,14 +21,16 @@
     const t0 = Date.now();
     const iv = setInterval(() => {
       try {
-        const p = f.contentDocument && f.contentDocument.getElementById('tutocheck');
-        if (p && !document.getElementById('tutocheck-outer')) {
-          const pre = document.createElement('pre');
-          pre.id = 'tutocheck-outer';
-          pre.textContent = p.textContent;
-          document.body.appendChild(pre);
-          clearInterval(iv);
+        for (const [inner, outer] of [['tutocheck', 'tutocheck-outer'], ['layoutcheck', 'layoutcheck-outer']]) {
+          const p = f.contentDocument && f.contentDocument.getElementById(inner);
+          if (p && !document.getElementById(outer)) {
+            const pre = document.createElement('pre');
+            pre.id = outer;
+            pre.textContent = p.textContent;
+            document.body.appendChild(pre);
+          }
         }
+        if (document.getElementById('tutocheck-outer') && document.getElementById('layoutcheck-outer')) clearInterval(iv);
       } catch (e) { /* cross-origin impossible en même origine */ }
       if (Date.now() - t0 > 25000) clearInterval(iv);
     }, 300);

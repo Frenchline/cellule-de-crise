@@ -21,6 +21,15 @@ let pendingMission = null;
 let chronoTimer = null, chronoLeft = 60;
 let tutoIndex = -1;
 
+// Hauteur réelle du viewport (dvh incertain sur mobile) → variable CSS --app-h
+function setAppH() {
+  document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`);
+}
+setAppH();
+addEventListener('resize', setAppH);
+addEventListener('orientationchange', setAppH);
+if (window.visualViewport) visualViewport.addEventListener('resize', setAppH);
+
 // ---------------- utilitaires ----------------
 function settings() { return campaign ? campaign.settings : CAM.loadSettings(); }
 
@@ -50,7 +59,9 @@ function applyIllusSettings() {
   const bar = $('#scene-bar');
   if (bar) {
     bar.classList.toggle('hidden', !illusOn());
-    UI.setSceneCollapsed(!!settings().sceneCollapsed);
+    // écrans ≤ 620 px : scène repliée par défaut (le tap du joueur reste prioritaire)
+    const collapsed = settings().sceneCollapsed ?? window.innerHeight <= 620;
+    UI.setSceneCollapsed(collapsed);
   }
 }
 
@@ -592,7 +603,8 @@ $('#set-illus').addEventListener('change', e => {
 
 // bandeau scène : tap = replier / déplier (persisté)
 $('#scene-bar').addEventListener('click', () => {
-  const s = persistSettings({ sceneCollapsed: !settings().sceneCollapsed });
+  const cur = settings().sceneCollapsed ?? window.innerHeight <= 620;
+  const s = persistSettings({ sceneCollapsed: !cur });
   UI.setSceneCollapsed(s.sceneCollapsed);
 });
 
@@ -699,6 +711,37 @@ if ('serviceWorker' in navigator) {
         } else E.endPhase(game);
       }
       logCursor = 0; UI.resetTranscript(); syncGameUI(true);
+      return;
+    }
+    if (mode.startsWith('layout:')) {
+      // mesure le défilement : body ne doit pas défiler, onglets dans l'écran
+      const parts = mode.slice(7).split(':');
+      pendingMission = parts[0];
+      launchMission();
+      const steps = parseInt(parts[1] || '0', 10);
+      for (let i = 0; i < steps && !game.result; i++) {
+        if (game.phase === 'choice') { E.chooseOption(game, 0); continue; }
+        if (game.phase === 'conversation') {
+          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
+          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
+        } else E.endPhase(game);
+      }
+      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
+      const se = document.scrollingElement;
+      const tabsR = $('#game-tabs').getBoundingClientRect();
+      const trR = $('#transcript').getBoundingClientRect();
+      const hudR = $('#game-hud').getBoundingClientRect();
+      const pre = document.createElement('pre');
+      pre.id = 'layoutcheck';
+      pre.textContent = JSON.stringify({
+        vw: innerWidth, vh: innerHeight,
+        bodyScrollH: se.scrollHeight, bodyNoScroll: se.scrollHeight <= innerHeight,
+        hudTop: Math.round(hudR.top), hudVisible: hudR.top >= 0 && hudR.top < innerHeight,
+        tabsBottom: Math.round(tabsR.bottom), tabsVisible: tabsR.bottom <= innerHeight,
+        transcriptH: Math.round(trR.height), transcriptOK: trR.height >= 80,
+        sceneH: $('#scene-bar').offsetParent ? Math.round($('#scene-bar').getBoundingClientRect().height) : 0,
+      });
+      document.body.append(pre);
       return;
     }
     if (mode.startsWith('debrief:')) {

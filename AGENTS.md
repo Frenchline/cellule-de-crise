@@ -30,7 +30,7 @@ ELECTRON_RUN_AS_NODE=1 /usr/share/devin-desktop/devin-desktop tools/simulate.js
 ## Architecture
 
 - `index.html` — écrans (accueil, dossier, QG, briefing, partie, débriefing)
-- `css/style.css` — néo-noir + HUD tactique, mobile-first 360px+
+- `css/style.css` — néo-noir + HUD tactique, mobile-first 360px+. En partie, `#scr-game` est `position:fixed` à `height:var(--app-h)` (px réels posés par `main.js` sur `innerHeight`, car `dvh` est peu fiable) et `body.in-game` verrouille le défilement : seul `.transcript` défile, HUD/compteurs/scène en haut, dés/main/onglets en bas. Paliers `max-height` : 700 px (scène 72), 620 px (scène repliée 44 par défaut + cartes 140 + dés 34), 540 px (scène masquée, HUD compact).
 - `js/engine.js` — **moteur pur, sans DOM** : état JSON sérialisable, RNG mulberry32 seedé (état dans `state.rngState`). Phases : `conversation` → `market` → `team` → résolution Terreur → nouveau tour.
 - `js/ui.js` — rendu DOM (HUD, transcription avec machine à écrire, dés, marché, onglets, modale carte)
 - `js/main.js` — navigation entre écrans, sauvegarde, chrono, tutoriel, vignettes d'événements, boucle d'animation du bandeau scène
@@ -105,7 +105,7 @@ Règles associées :
 
 ## Hooks de débogage (`?debug` requis)
 
-`/?debug#auto:hq` (avancés verrouillés), `#auto:hq:unlocked` (campagne mémoire pré-remplie), `#auto:brief:<id>`, `#auto:game:<id>[:<pas>]` (joue N phases, choix → option 0), `#auto:choice:<id>` (joue jusqu'au premier choix), `#auto:debrief:<id>` (débrief forcé), `#auto:vig:<kind>` (affiche une vignette : terror, freed, death, assault, surrender, heureh, acte, clue), `#auto:tuto:<n>` (tutoriel à l'étape n), `#auto:gallery` (galerie de relecture : tous les portraits × expressions, scènes et variantes, vignettes), `#auto:tutocheck` (vérifie chaque étape du tutoriel via `elementFromPoint` + vrais `click()` DOM, rapport JSON dans `<pre id="tutocheck">`). En mode auto aucune écriture localStorage.
+`/?debug#auto:hq` (avancés verrouillés), `#auto:hq:unlocked` (campagne mémoire pré-remplie), `#auto:brief:<id>`, `#auto:game:<id>[:<pas>]` (joue N phases, choix → option 0), `#auto:choice:<id>` (joue jusqu'au premier choix), `#auto:debrief:<id>` (débrief forcé), `#auto:vig:<kind>` (affiche une vignette : terror, freed, death, assault, surrender, heureh, acte, clue), `#auto:tuto:<n>` (tutoriel à l'étape n), `#auto:gallery` (galerie de relecture : tous les portraits × expressions, scènes et variantes, vignettes), `#auto:tutocheck` (vérifie chaque étape du tutoriel via `elementFromPoint` + vrais `click()` DOM, rapport JSON dans `<pre id="tutocheck">`), `#auto:layout:<id>:<pas>` (joue N phases puis mesure : `scrollHeight <= innerHeight`, onglets dans l'écran, hauteur transcript → `<pre id="layoutcheck">`). En mode auto aucune écriture localStorage.
 
 Pour les captures à taille mobile exacte : `tests/vp.html?w=390&h=844&src=/<url-encodée>` charge l'app dans une iframe de la dimension voulue (le viewport headless direct est borné à ~500px de large).
 

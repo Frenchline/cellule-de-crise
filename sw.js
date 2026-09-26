@@ -1,5 +1,5 @@
 // Service Worker — cache hors-ligne complet
-const CACHE = 'negociateur-v3';
+const CACHE = 'negociateur-v4';
 const FILES = [
   './',
   './index.html',

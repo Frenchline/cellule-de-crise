@@ -28,6 +28,7 @@ export function showScreen(id) {
   $$('.screen').forEach(s => s.classList.remove('active'));
   const scr = $('#' + id);
   if (scr) scr.classList.add('active');
+  document.body.classList.toggle('in-game', id === 'scr-game');
   scr && scr.scrollTo(0, 0);
 }
 
