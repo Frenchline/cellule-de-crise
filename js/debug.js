@@ -453,10 +453,13 @@ async function runTutoCheck() {
       $$('#game-tabs button.on').forEach(b => b.classList.remove('on'));
     }
     await sleep(30);
-    const entry = { step: i, sel: step.sel, advanceOn: step.advanceOn || 'next', checks: {} };
-    const target = $(step.sel);
-    entry.checks.target = target ? hitTest(target) : { ok: false, missing: true };
-    if (step.sel === '#hand') {
+    const entry = { step: i, sel: step.center ? 'center' : step.sel, advanceOn: step.advanceOn || 'next', checks: {} };
+    // étapes centrées ({ center: true }) : pas de cible, rien à vérifier en couverture
+    if (step.sel && !step.center) {
+      const target = $(step.sel);
+      entry.checks.target = target ? hitTest(target) : { ok: false, missing: true };
+    }
+    if (step.sel === '#hand' && !step.center) {
       const c = $('#hand .card');
       entry.checks.firstCard = c ? hitTest(c) : { ok: false, missing: true };
     }

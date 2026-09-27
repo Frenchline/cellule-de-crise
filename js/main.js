@@ -434,15 +434,22 @@ function startChrono() {
 function stopChrono() { if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; } chronoLeft = chronoBase(); AU.setTension({ chronoLeft: null }); }
 
 // ---------------- tutoriel ----------------
+// Bloc d'intro ({ center: true }, sans cible ni spot) : le but, les issues,
+// les défaites et le tour de jeu — AVANT de présenter l'interface.
 const TUTO_STEPS = [
-  { sel: '#game-hud', text: 'Bienvenue à la cellule de crise. En haut : la MENACE (1-7, gardez-la basse), les otages, la pression médiatique, l\'horloge Terreur et vos PC.' },
-  { sel: '#transcript', text: 'Ici, la transcription de la négociation, et au-dessus la caméra de surveillance : l\'interlocuteur et son humeur. Touchez le transcript pour accélérer le texte.' },
-  { sel: '#hand', text: 'Votre main de cartes de conversation — les effets de chaque palier sont écrits dessus, en vert. Touchez « Rassurer » puis « Jouer cette carte ».', advanceOn: 'card' },
+  { center: true, text: 'Cellule de crise. Un homme armé retient des otages — et il a décroché le téléphone. Vous êtes le négociateur au bout du fil : votre mission est de les faire sortir vivants.' },
+  { center: true, text: 'Quatre issues : la REDDITION (menace ≤ 2, demande majeure réglée, « Proposer la reddition » réussie) ; la LIBÉRATION de tous les otages ; l\'ASSAUT, rapide mais risqué ; ou tenir jusqu\'à l\'HEURE H — la dernière carte Terreur.' },
+  { center: true, text: 'Ce qui vous perd : la menace à 7 — il tue un otage. Plus un seul otage en vie — défaite. La presse à 10 — le préfet ordonne l\'assaut, vous perdez la main. Certains scénarios ajoutent leurs pièges (compteurs, fuite).' },
+  { center: true, text: 'Chaque tour : CONVERSATION (vos cartes coûtent des PC) → MARCHÉ → ACTION D\'ÉQUIPE → carte TERREUR. La pioche Terreur est l\'horloge de la nuit : quand elle s\'épuise, tout se joue.' },
+  { sel: '#game-hud', text: 'En haut : la MENACE (1-7 — à 7, il tue), les OTAGES (touchez pour le dossier nominatif — certains sont fragiles, d\'autres imprévisibles), la PRESSE, l\'horloge TERREUR et vos PC.' },
+  { sel: '#transcript', text: 'La transcription de la négociation ; au-dessus, la caméra de surveillance et son humeur. Les lignes « PSY — DR ANSELME » sont les conseils de la psychologue (désactivables au QG). Touchez le texte pour l\'accélérer.' },
+  { sel: '#hand', text: 'Votre main de cartes de conversation : les effets de chaque palier sont en vert, avec leur % de chances exactes — un ⚠ rouge signale un échec dangereux. Touchez « Rassurer » puis « Jouer cette carte ».', advanceOn: 'card' },
   { sel: '#dice-zone', text: 'Les dés se jouent sur 5-6. La menace modifie le nombre de dés : sous la tension, tout se complique.' },
-  { sel: '#game-tabs', text: 'Ouvrez l\'onglet Marché : vous y achèterez des cartes à usage unique pendant la préparation.', advanceOn: 'tab' },
-  { sel: '#game-tabs', text: 'Les autres onglets : Équipe (actions), Dossier (indices psychologiques), Demandes (ce qu\'il réclame). Les ⓘ ouvrent les règles au bon endroit.' },
+  { sel: '#game-tabs', text: 'Ouvrez l\'onglet Marché : des cartes à usage unique s\'achètent en préparation. « Exfiltration ciblée » vous laisse choisir l\'otage libéré ; « Promesse » vous engage — il vérifiera plus tard.', advanceOn: 'tab' },
+  { sel: '#game-tabs', text: 'Onglet Équipe : une action par tour, chacune lance un dé — sur un 1 elle échoue ; les deux premiers faux pas de la nuit sont couverts par la cellule. Dossier : indices et otages. Demandes : ce qu\'il réclame. Les ⓘ ouvrent les règles.' },
+  { center: true, text: 'Il vous posera parfois des questions — choisissez un ton : empathie, autorité, pression, ruse. Le badge ✓ vert signale une réponse cohérente avec son profil. Il retient tout.' },
   { sel: '#btn-endphase', text: 'Quand vos PC sont dépensés, terminez la phase : la carte Terreur tombera en fin de tour. Surveillez l\'horloge. Terminez cette phase.', advanceOn: 'phase' },
-  { sel: '#game-tabs', text: 'Objectif : faites baisser la menace, réglez sa demande majeure, puis proposez la reddition quand la menace est ≤ 2. Le bouton « ? » ouvre les règles à tout moment. Bonne chance, négociateur.' },
+  { sel: '#game-tabs', text: 'Ce soir : trois otages et une demande majeure (★) — concédez-la ou faites-la abandonner, descendez la menace à 2, puis « Proposer la reddition ». Le bouton « ? » rouvre les règles. Bonne chance, négociateur.' },
 ];
 
 let tutoTarget = null;
@@ -471,11 +478,17 @@ function syncTutoVisibility() {
 function positionTutoBox(target) {
   const box = $('#tuto-overlay .tuto-box');
   if (!box) return;
-  box.style.top = 'auto'; box.style.bottom = 'auto';
+  box.style.top = 'auto'; box.style.bottom = 'auto'; box.style.transform = '';
+  if (!target) {
+    // étape centrée ({ center: true } ou cible absente) : bulle plein écran
+    box.style.top = '50%';
+    box.style.transform = 'translateY(-50%)';
+    return;
+  }
   const bh = box.offsetHeight || 140;
   const vh = window.innerHeight;
   const gap = 10, edge = 12;
-  const r = target ? target.getBoundingClientRect() : { top: vh / 2, bottom: vh / 2 };
+  const r = target.getBoundingClientRect();
   const fitsTop = r.top >= edge + bh + gap;
   const fitsBottom = (vh - r.bottom) >= edge + bh + gap;
   const preferTop = (r.top + r.bottom) / 2 > vh / 2;
@@ -497,7 +510,7 @@ function showTutoStep() {
   next.textContent = step.advanceOn ? 'À vous de jouer…' : 'Compris';
   next.disabled = !!step.advanceOn;
   clearSpot();
-  tutoTarget = $(step.sel);
+  tutoTarget = (!step.center && step.sel) ? $(step.sel) : null;
   if (tutoTarget) tutoTarget.classList.add('tuto-spot');
   positionTutoBox(tutoTarget);
   syncTutoVisibility();
