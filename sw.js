@@ -1,6 +1,6 @@
 // Service Worker — cache hors-ligne complet
 // version : garder en phase avec js/version.js
-const CACHE = 'negociateur-1.15';
+const CACHE = 'negociateur-1.16';
 const FILES = [
   './',
   './index.html',
