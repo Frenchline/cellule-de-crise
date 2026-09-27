@@ -76,6 +76,12 @@
         <h3 class="section-title" id="hq-rel-title">Relations</h3>
         <div id="hq-relations"></div>
 
+        <h3 class="section-title hidden" id="hq-journal-title">Journal</h3>
+        <div id="hq-journal"></div>
+
+        <h3 class="section-title">Trophées</h3>
+        <div id="hq-trophies" class="trophies"></div>
+
         <h3 class="section-title">Compétences <span id="hq-skillpoints" class="skillpoints"></span></h3>
         <div id="hq-skills" class="skills"></div>
 
@@ -102,6 +108,8 @@
         <div class="row-btns wrap">
           <button class="btn btn-small" id="btn-resume" hidden>Reprendre la partie en cours</button>
           <button class="btn btn-small" id="btn-rest">Repos (−2 stress, +1 jour)</button>
+          <button class="btn btn-small" id="btn-export">Exporter la progression</button>
+          <button class="btn btn-small" id="btn-import">Importer</button>
           <button class="btn btn-small" id="btn-reset">Réinitialiser la campagne</button>
         </div>
       </div>
@@ -194,6 +202,7 @@
     <button class="btn btn-small" id="btn-cut-skip">Passer ▶▶</button>
   </div>
   <div id="rules-modal" class="rules-modal hidden"></div>
+  <div id="io-modal" class="modal hidden"></div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

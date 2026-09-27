@@ -77,8 +77,54 @@ export function initDebug(a) {
       api.campaign.missions['tutoriel'] = { finished: true, wins: 1, plays: 1, bestScore: 620, bestGrade: 'B', bestOutcome: 'surrender' };
       api.campaign.missions['braquage'] = { finished: true, wins: 1, plays: 2, bestScore: 740, bestGrade: 'A', bestOutcome: 'liberation' };
       api.campaign.missions['hopital'] = { finished: true, wins: 1, plays: 1, bestScore: 590, bestGrade: 'B', bestOutcome: 'surrender' };
+      api.campaign.skillPoints = 3;
+      api.campaign.trophies = ['premier_sang', 'sans_faute'];
+      api.campaign.story.complice = true;
+      api.campaign.storyLog = [
+        { day: 2, mission: 'tutoriel', from: 'anselme', text: 'Vous avez fait taire la nuit sans lever la voix. Dormez quand même.' },
+        { day: 3, mission: 'braquage', from: 'castagne', text: 'Morel s\'est rendu avec son arme déchargée. Vous l\'avez convaincu, pas désarmé. C\'est la différence.' },
+        { day: 3, mission: 'braquage', from: 'morvan', text: 'Le Crédit Rhodanien a fermé ses volets à l\'aube. Ma une est écrite : « La voix a gagné ».' },
+        { day: 5, mission: 'hopital', from: 'castagne', text: 'Le couloir était propre, le bilan l\'est presque. La direction de l\'hôpital vous remercie.' },
+      ];
     }
     api.showHQ(); return true;
+  }
+  if (mode.startsWith('exfil:')) {
+    // #auto:exfil:<id> — modale de libération ciblée figée pour capture
+    api.pendingMission = splitId(mode.slice(6), 0)[0];
+    api.launchMission();
+    const game = api.game;
+    game.phase = 'choice';
+    game.pendingChoice = { hostagePick: 1, resume: 'conversation' };
+    refreshTranscript();
+    return true;
+  }
+  if (mode.startsWith('questionlf:')) {
+    // #auto:questionlf:<id> — question figée avec la compétence Lecture froide :
+    // badge « cohérent » affiché SANS indice révélé
+    api.campaign.skills = ['lecture_froide'];
+    const parts = splitId(mode.slice(11), 1);
+    api.pendingMission = parts[0];
+    api.launchMission();
+    const game = api.game;
+    const m = getMission(api.pendingMission);
+    const q = (m.questions || []).find(x => x.id === parts[1]) || (m.questions || []).find(x => x.replies.some(r => r.effects && r.effects.ifClue));
+    if (q) {
+      game.turn = Math.max(game.turn, q.minTurn || 1);
+      E.maybeQuestion(game);
+    }
+    refreshTranscript();
+    return true;
+  }
+  if (mode === 'io:export' || mode === 'io:import') {
+    // #auto:io:export|io:import — modale export/import figée pour capture
+    api.showHQ();
+    if (mode === 'io:export') {
+      UI.openIOModal('Exporter la progression', { value: CAM.exportSave(api.campaign), readonly: true });
+    } else {
+      UI.openIOModal('Importer une progression', { okLabel: 'Importer', onOk: () => { } });
+    }
+    return true;
   }
   if (mode === 'gallery') { UI.renderGallery(); UI.showScreen('scr-gallery'); return true; }
   if (mode === 'cutgallery') { renderCutGallery(); return true; }

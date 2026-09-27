@@ -13,6 +13,8 @@ import {
 } from './engine.js';
 import { getRank, RANKS, missionUnlocked, dailyMissionId, dailySeed } from './campaign.js';
 import { REP_CHARS, repModifiers } from './reputation.js';
+import { TROPHIES } from './trophies.js';
+import { STORY_CHARS } from './data/story.js';
 import * as PIX from './pixel.js';
 import { MISSION_LIST, getMission } from './data/missions/index.js';
 
@@ -325,6 +327,7 @@ export function shortEffects(eff, icons = {}) {
   if (eff.pc) parts.push(`${eff.pc > 0 ? '+' : '−'}${Math.abs(eff.pc)} PC`);
   if (eff.pcNext) parts.push(`${eff.pcNext > 0 ? '+' : '−'}${Math.abs(eff.pcNext)} PC⏭`);
   if (eff.free) parts.push(`⛓ libère ${eff.free}`);
+  if (eff.pickFree) parts.push(`⛓ libère ${eff.pickFree} (au choix)`);
   if (eff.kill) parts.push(`✝ ${eff.kill}`);
   if (eff.reveal) parts.push(`indice${eff.reveal > 1 ? ' ×' + eff.reveal : ''}`);
   if (eff.prep) parts.push(`prép. ${eff.prep > 0 ? '+' : '−'}${Math.abs(eff.prep)}`);
@@ -513,6 +516,14 @@ export function renderTab(state, tab, handlers) {
       const c = el('div', 'clue-card');
       c.append(el('div', 'cl-desc', line));
       p.append(c);
+    }
+    // promesse non tenue : visible dans le dossier
+    if (state.flags.promise) {
+      const age = Math.max(0, state.turn - (state.flags.promiseTurn || state.turn));
+      const pw = el('div', 'clue-card promise-warn');
+      pw.append(el('div', 'cl-desc',
+        `⚠ PROMESSE EN COURS — il attend des nouvelles (il y a ${age} tour${age > 1 ? 's' : ''}). Passé un délai, il vérifiera.`));
+      p.append(pw);
     }
     // otages nommés
     const hsec = el('div', 'host-list');
@@ -703,16 +714,57 @@ export function renderHQ(c, missionList, handlers) {
     if (!ctxs.length) relBox.append(el('div', 'rel-note', 'Réputation neutre : aucun modificateur en mission.'));
   }
 
+  // ---------- Journal (fil narratif entre missions) ----------
+  const jTitle = $('#hq-journal-title'), jBox = $('#hq-journal');
+  if (jTitle && jBox) {
+    if (c.storyLog && c.storyLog.length) {
+      jTitle.classList.remove('hidden');
+      jBox.innerHTML = '';
+      for (const e of c.storyLog.slice(-6).reverse()) {
+        const ch = STORY_CHARS[e.from];
+        const row = el('div', 'rel-row journal-row');
+        if (ch && ch.portrait) {
+          const av = PIX.spriteCanvas(PIX.portraitSprite(ch.portrait, 'calme'), 2);
+          av.className = 'rel-av';
+          row.append(av);
+        }
+        const body = el('div', 'rel-body');
+        const head = el('div', 'rel-head');
+        head.append(el('b', null, ch ? ch.name : e.from), el('span', 'rel-role', `jour ${e.day}`));
+        body.append(head, el('div', 'rel-note', `« ${e.text} »`));
+        row.append(body);
+        jBox.append(row);
+      }
+    } else {
+      jTitle.classList.add('hidden');
+      jBox.innerHTML = '';
+    }
+  }
+
+  // ---------- Trophées ----------
+  const tBox = $('#hq-trophies');
+  if (tBox) {
+    tBox.innerHTML = '';
+    const owned = new Set(c.trophies || []);
+    for (const t of TROPHIES) {
+      const chip = el('div', `trophy${owned.has(t.id) ? ' on' : ''}`);
+      chip.append(el('span', 'tr-name', `${owned.has(t.id) ? '🏅' : '🔒'} ${t.name}`));
+      chip.append(el('span', 'tr-desc', t.desc));
+      tBox.append(chip);
+    }
+  }
+
   const sk = $('#hq-skills');
   sk.innerHTML = '';
   $('#hq-skillpoints').textContent = c.skillPoints ? `(${c.skillPoints} point${c.skillPoints > 1 ? 's' : ''} à dépenser)` : '';
   for (const s of Object.values(SKILLS)) {
     const owned = c.skills.includes(s.id);
+    const cost = s.cost || 1;
     const d = el('div', `skill-card${owned ? ' owned' : ''}`);
-    d.append(el('span', 's-name', s.name));
+    d.append(el('span', 's-name', `${s.name}${cost > 1 ? ` · ${cost} pts` : ''}`));
     d.append(el('span', 's-desc', s.desc));
-    const btn = el('button', 'btn btn-small', owned ? 'Apprise' : 'Apprendre');
-    if (owned || c.skillPoints <= 0) btn.disabled = true;
+    const btn = el('button', 'btn btn-small', owned ? 'Apprise' : `Apprendre (${cost} pt${cost > 1 ? 's' : ''})`);
+    if (owned || c.skillPoints < cost) btn.disabled = true;
     btn.addEventListener('click', () => handlers.learn(s.id));
     d.append(btn);
     sk.append(d);
@@ -720,7 +772,7 @@ export function renderHQ(c, missionList, handlers) {
 }
 
 // ---------------- briefing ----------------
-export function renderBriefing(mission, optsSel, onToggle, rep = null) {
+export function renderBriefing(mission, optsSel, onToggle, rep = null, storyCtx = []) {
   const paper = $('#brief-paper');
   paper.innerHTML = '';
   if (mission.type === 'advanced') {
@@ -728,13 +780,13 @@ export function renderBriefing(mission, optsSel, onToggle, rep = null) {
   }
   for (const p of mission.briefing) paper.append(el('p', null, p));
 
-  // Encart « Contexte » : effets actifs de la réputation
-  const ctxs = rep ? repModifiers(rep).contexts : [];
+  // Encart « Contexte » : effets actifs de la réputation + fils narratifs
+  const ctxs = [...(rep ? repModifiers(rep).contexts : []), ...storyCtx];
   if (ctxs.length) {
     const box = el('div', 'ctx-box');
     box.append(el('div', 'ctx-title', 'CONTEXTE'));
     for (const c of ctxs) {
-      const ch = Object.values(REP_CHARS).find(x => x.id === c.who);
+      const ch = Object.values(REP_CHARS).find(x => x.id === c.who) || STORY_CHARS[c.who];
       box.append(el('div', 'ctx-line', `▸ ${c.label}${ch ? ` (${ch.name})` : ''} — ${c.text}`));
     }
     paper.append(box);
@@ -837,7 +889,7 @@ export function drawTimeline(canvas, state) {
   }
 }
 
-export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankUps = 0, illus = true, repReport = null) {
+export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankUps = 0, illus = true, repReport = null, trophies = []) {
   const paper = $('#debrief-paper');
   paper.innerHTML = '';
   if (illus) {
@@ -907,6 +959,11 @@ export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankU
   if (rankUps > 0) {
     paper.append(el('div', 'd-promo',
       `★ PROMOTION : ${rankName} — ${rankUps} point${rankUps > 1 ? 's' : ''} de compétence à dépenser au QG`));
+  }
+  if (trophies && trophies.length) {
+    for (const t of trophies) {
+      paper.append(el('div', 'd-trophy', `🏅 Trophée débloqué : ${t.name} — ${t.desc}`));
+    }
   }
 
   // ---- DÉROULÉ (graphe + moments clés) ----
@@ -1045,8 +1102,21 @@ export function renderChoiceModal(state, onChoose) {
   const ch = getChoice(state);
   if (!ch) { modal.classList.add('hidden'); return; }
   modal.innerHTML = '';
-  const box = el('div', `ch-card${ch.question ? ' ch-dialog' : ''}`);
-  if (ch.question) {
+  const box = el('div', `ch-card${ch.question ? ' ch-dialog' : ch.hostagePick ? ' ch-hostpick' : ''}`);
+  if (ch.hostagePick) {
+    // exfiltration ciblée : liste des otages encore retenus
+    box.append(el('div', 'ch-title', 'EXFILTRATION CIBLÉE'));
+    box.append(el('div', 'ch-prompt', ch.prompt));
+    const opts = el('div', 'ch-opts');
+    ch.options.forEach((o, i) => {
+      const b = el('button', 'ch-opt');
+      b.append(el('div', 'co-label', `⛓ ${o.label}`));
+      if (o.desc) b.append(el('div', 'co-desc', o.desc));
+      b.addEventListener('click', () => onChoose(i));
+      opts.append(b);
+    });
+    box.append(opts);
+  } else if (ch.question) {
     // dialogue : le preneur parle, trois réponses proposées
     const taker = getTaker(state);
     const head = el('div', 'ch-speaker');
@@ -1089,6 +1159,53 @@ export function renderChoiceModal(state, onChoose) {
 
 export function closeChoiceModal() {
   $('#choice-modal').classList.add('hidden');
+}
+
+// ---------------- modale export / import de progression ----------------
+export function openIOModal(title, { value = '', readonly = false, okLabel = null, onOk = null } = {}) {
+  const modal = $('#io-modal');
+  modal.innerHTML = '';
+  const box = el('div', 'm-card io-card');
+  box.append(el('div', 'm-name', title));
+  const ta = el('textarea', 'io-text');
+  ta.value = value;
+  ta.readOnly = readonly;
+  ta.rows = 5;
+  ta.spellcheck = false;
+  box.append(ta);
+  const err = el('div', 'io-err');
+  box.append(err);
+  const row = el('div', 'row-btns');
+  if (readonly) {
+    const cp = el('button', 'btn btn-small', 'Copier');
+    cp.addEventListener('click', () => {
+      const done = () => { cp.textContent = 'Copié ✓'; };
+      const fallback = () => { ta.select(); try { document.execCommand('copy'); } catch { } done(); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done).catch(fallback);
+      } else fallback();
+    });
+    row.append(cp);
+  }
+  if (okLabel && onOk) {
+    const ok = el('button', 'btn btn-primary btn-small', okLabel);
+    ok.addEventListener('click', () => onOk(ta.value, err));
+    row.append(ok);
+  }
+  const close = el('button', 'btn btn-small', 'Fermer');
+  close.addEventListener('click', () => modal.classList.add('hidden'));
+  row.append(close);
+  box.append(row);
+  modal.append(box);
+  modal.classList.remove('hidden');
+  modal.onclick = e => { if (e.target === modal) modal.classList.add('hidden'); };
+  if (readonly) ta.select();
+  return box;
+}
+
+export function closeIOModal() {
+  const m = $('#io-modal');
+  if (m) m.classList.add('hidden');
 }
 
 // ============================================================
@@ -1136,12 +1253,13 @@ export const RULES = [
       'Les <b>cartes de base</b> (vertes en main) sont réutilisables une fois par tour. Les <b>cartes du marché</b> (bordure en pointillés) sont à usage unique et s\'achètent en phase de préparation au prix indiqué.',
       'Une carte grisée indique pourquoi elle est bloquée : PC insuffisants, condition non remplie, déjà jouée ce tour.',
       'Certaines cartes ont des conditions (ex. « Demander un otage » exige menace ≤ 5) ou une cible (« Négocier une demande » cible une demande en attente).',
+      'Une <b>promesse</b> faite puis laissée en suspens expire au bout de 3 tours : il vérifie une fois — sur 1-2, il comprend le mensonge (menace +1), sinon elle tient.',
     ],
   },
   {
     id: 'sec-actions', title: 'Actions d\'équipe',
     body: [
-      'Une action d\'équipe par tour, en phase « Action d\'équipe ».',
+      'Une action d\'équipe par tour, en phase « Action d\'équipe ». Chacune lance un dé discret : sur un 1 (≈ 1 chance sur 6), elle échoue — le coût est payé, pas l\'effet. Les deux premiers faux pas de la nuit sont couverts par la cellule.',
       '<b>RENSEIGNEMENT</b> — révèle un indice du dossier (bonus de dés, nouvelles cartes possibles). Coût : pression +1.',
       '<b>POSITIONNER LE TIREUR</b> — préparation +1 (max 3), indispensable pour un assaut sûr. Risque : si menace ≥ 5, il repère le laser → menace +1.',
       '<b>RAVITAILLEMENT</b> — menace −1 (et effet bonus dans certains scénarios). Coût : pression +1.',

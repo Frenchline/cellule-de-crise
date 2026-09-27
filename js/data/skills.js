@@ -43,6 +43,27 @@ export const SKILLS = {
     desc: 'La pression médiatique ne monte qu\'un tour sur deux.',
     effect: { pressureEveryOther: true },
   },
+  // ---------- compétences avancées (coût en points) ----------
+  lecture_froide: {
+    id: 'lecture_froide', name: 'Lecture froide', cost: 2,
+    desc: 'À sa première question, les réponses cohérentes avec son profil sont marquées — même sans indice révélé.',
+    effect: { readFirstQuestion: true },
+  },
+  relations: {
+    id: 'relations', name: 'Relations', cost: 1,
+    desc: 'Carnet d\'adresses : vos réputations (presse, hiérarchie) comptent pour 6 au minimum dans les modificateurs de mission.',
+    effect: { repFloor: 6 },
+  },
+  nerfs_acier: {
+    id: 'nerfs_acier', name: 'Nerfs d\'acier', cost: 2,
+    desc: 'L\'option Chrono passe de 60 s à 75 s par phase de conversation.',
+    effect: { chrono: 75 },
+  },
+  discipline: {
+    id: 'discipline', name: 'Discipline d\'équipe', cost: 2,
+    desc: 'Un jet d\'équipe raté (1) est relancé une fois — le second jet fait foi.',
+    effect: { teamReroll: true },
+  },
 };
 
 export const SKILL_LIST = Object.values(SKILLS);

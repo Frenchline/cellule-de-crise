@@ -64,6 +64,15 @@ export const REP_CHARS = {
 // ---------------- Modificateurs de départ ----------------
 // rep → ce que le moteur applique en createGame (option `rep`) et ce que
 // le briefing affiche dans l'encart « Contexte ».
+// Compétence « relations » : jauges vues au plancher 6 pour les modificateurs.
+export function repEffective(rep, skills = []) {
+  const r = { ...REP_DEFAULT, ...(rep || {}) };
+  if (skills && skills.includes('relations')) {
+    return { presse: Math.max(6, r.presse), hierarchie: Math.max(6, r.hierarchie) };
+  }
+  return r;
+}
+
 export function repModifiers(rep = REP_DEFAULT) {
   const mods = { mediaGrace: 0, pressureStart: 0, prepBonus: 0, assaultAt: 10, contexts: [] };
   if (rep.presse >= 8) {

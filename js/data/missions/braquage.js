@@ -149,7 +149,8 @@ export const MISSION_BRAQUAGE = {
                'accalmie', 'otage_malade', 'coup_feu', 'brak_sang', 'brak_nolan'],
 
   market: ['verite_brutale', 'famille', 'promesse', 'echange', 'bluff_assaut', 'mediateur',
-           'dossier_psy', 'souffrance', 'mentir_delais', 'appel_proche', 'humour', 'silence_tactique', 'nourriture'],
+           'dossier_psy', 'souffrance', 'mentir_delais', 'appel_proche', 'humour', 'silence_tactique', 'nourriture',
+           'liberation_ciblee'],
 
   questions: [
     {

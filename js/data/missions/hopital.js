@@ -153,7 +153,8 @@ export const MISSION_HOPITAL = {
                'hop_patient', 'accalmie', 'hop_chef', 'accalmie'],
 
   market: ['famille', 'appel_proche', 'souffrance', 'dossier_psy', 'mediateur', 'promesse',
-           'nourriture', 'verite_brutale', 'echange', 'mentir_delais', 'silence_tactique', 'humour', 'bluff_assaut'],
+           'nourriture', 'verite_brutale', 'echange', 'mentir_delais', 'silence_tactique', 'humour', 'bluff_assaut',
+           'liberation_ciblee'],
 
   questions: [
     {

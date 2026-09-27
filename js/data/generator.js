@@ -51,7 +51,7 @@ const TERROR_POOL = ['nervosite', 'coup_feu', 'otage_panique', 'direct_tv', 'ult
 
 const MARKET_POOL = ['promesse', 'humour', 'verite_brutale', 'nourriture', 'echange',
   'famille', 'appel_proche', 'mentir_delais', 'silence_tactique', 'souffrance',
-  'bluff_assaut', 'mediateur', 'dossier_psy'];
+  'bluff_assaut', 'mediateur', 'dossier_psy', 'liberation_ciblee'];
 
 // ---------- helpers ----------
 

@@ -63,7 +63,7 @@ function pickRandom(state, arr) {
 }
 
 // ---------------- Création ----------------
-export function createGame({ missionId, seed = 1, skills = [], options = {}, agentName = 'Négociateur', stress = 0, rep = null }) {
+export function createGame({ missionId, seed = 1, skills = [], options = {}, agentName = 'Négociateur', stress = 0, rep = null, story = null }) {
   const mission = getMission(missionId);
   if (!mission) throw new Error(`Mission inconnue : ${missionId}`);
 
@@ -98,6 +98,8 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
       pcNext: 0,
       nextTerrorFree: false,
       promise: false,
+      promiseTurn: null,      // tour où la promesse a été faite (contrôle à +3)
+      chronoBase: skills.includes('nerfs_acier') ? SKILLS.nerfs_acier.effect.chrono : 60,
       compliceRevealed: false,
       forcedAssault: false,
       pressureWarned: false,
@@ -124,6 +126,7 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
     history: [],          // [{turn, threat, pressure, held}] — graphe du débrief
     actStartTurn: mission.acts ? 1 : null, // tour de début de l'acte courant
     assaultAt: 10,        // pression de l'assaut forcé (9 si le préfet s'impatiente)
+    threatMax: 1,         // pic de menace de la partie (trophée « sang-froid »)
   };
   for (const c of mission.counters || []) {
     state.counters[c.id] = { id: c.id, label: c.label, icon: c.icon || '◆', value: c.start || 0, max: c.max, resetTo: c.resetTo ?? 0, onMax: c.onMax, cause: c.cause || c.label };
@@ -154,11 +157,22 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
 
   // Réputation de campagne (rep) : modificateurs de départ, moteur pur.
   rep = rep || {};
+  // compétence « relations » : les modificateurs voient les jauges plancher à 6
+  if (skills.includes('relations')) {
+    rep = { ...rep, presse: Math.max(6, rep.presse || 0), hierarchie: Math.max(6, rep.hierarchie || 0) };
+  }
   if (rep.presse >= 8) state.flags.mediaGrace = 2;      // les 2 premiers ticks de presse sautés
   if (rep.hierarchie >= 8) state.prep = Math.min(3, state.prep + 1);
   if (rep.hierarchie <= 2) state.assaultAt = 9;
   if (rep.presse <= 2) changePressure(state, 2);        // la presse vous attend au tournant
 
+  // fil narratif : l'homme du Crédit Rhodanien parmi les mutins de Saint-Aubin
+  if (missionId === 'prison' && story && story.complice) {
+    state.flags.storyComplice = true;
+    log(state, 'radio', 'ℹ Renseignement : parmi les mutins, une vieille connaissance — l\'homme du Crédit Rhodanien. Il vous connaît.');
+  }
+
+  state.threatMax = Math.max(state.threatMax, state.threat);
   pushHistory(state);
   state.pc = computePC(state);
 
@@ -332,6 +346,7 @@ export function describeEffects(eff) {
   if (eff.pc) parts.push(`+${eff.pc} PC`);
   if (eff.pcNext) parts.push(`${eff.pcNext > 0 ? '+' : ''}${eff.pcNext} PC (prochain tour)`);
   if (eff.free) parts.push(`${eff.free} otage${eff.free > 1 ? 's' : ''} libéré${eff.free > 1 ? 's' : ''}`);
+  if (eff.pickFree) parts.push(`${eff.pickFree} otage libéré (au choix)`);
   if (eff.kill) parts.push(`${eff.kill} otage${eff.kill > 1 ? 's' : ''} tué${eff.kill > 1 ? 's' : ''}`);
   if (eff.reveal) parts.push(`${eff.reveal} indice${eff.reveal > 1 ? 's' : ''} révélé${eff.reveal > 1 ? 's' : ''}`);
   if (eff.prep) parts.push(`préparation ${eff.prep > 0 ? '+' : ''}${eff.prep}`);
@@ -358,6 +373,7 @@ function changeThreat(state, delta) {
   if (!delta || state.result) return;
   const before = state.threat;
   state.threat = Math.max(1, Math.min(7, state.threat + delta));
+  if (state.threat > (state.threatMax || 0)) state.threatMax = state.threat;
   if (state.threat !== before) {
     log(state, 'sys', `Menace : ${before} → ${state.threat}${delta > 0 ? ' ▲' : ' ▼'}`);
   }
@@ -686,7 +702,10 @@ function resolveEffect(state, eff, ctx = {}) {
   if (eff.reveal) revealClues(state, eff.reveal);
   if (eff.prep) state.prep = Math.max(0, Math.min(3, state.prep + eff.prep));
   if (eff.discardNextTerror) state.flags.nextTerrorFree = true;
-  if (eff.mark === 'promesse') state.flags.promise = true;
+  if (eff.mark === 'promesse') {
+    state.flags.promise = true;
+    state.flags.promiseTurn = state.turn;
+  }
   if (eff.neutralizeDemand && ctx.target) {
     const d = getDemand(state, ctx.target);
     const def = getDemandDef(state, ctx.target);
@@ -697,6 +716,11 @@ function resolveEffect(state, eff, ctx = {}) {
   }
   if (eff.win === 'surrender') endGame(state, 'surrender');
   if (eff.lose) endGame(state, 'defeat');
+  // exfiltration ciblée : le joueur choisit l'otage libéré
+  if (eff.pickFree && !state.result && !state.pendingChoice && heldHostages(state).length) {
+    state.phase = 'choice';
+    state.pendingChoice = { hostagePick: eff.pickFree, resume: ctx.resume || 'conversation' };
+  }
 }
 
 // ---------------- Jouer une carte ----------------
@@ -831,6 +855,25 @@ export function buyCard(state, slotIndex) {
   return { ok: true, card };
 }
 
+// Jet d'équipe 1d6 (RNG seedé). Compétence « discipline » : un 1 est relancé
+// une fois — le second jet fait foi, même s'il retombe sur 1.
+export function teamRoll(state, label) {
+  const d0 = rollDice(state, 1)[0];
+  let d = d0, note = '';
+  // épreuve du feu : les deux premiers faux pas de la nuit sont couverts par la
+  // cellule (adoucissement d'équilibrage du lot 5) — les suivants mordent
+  if (d0 === 1 && (state.flags.teamSlip || 0) < 2) {
+    state.flags.teamSlip = (state.flags.teamSlip || 0) + 1;
+    d = 3;
+    note = ' → couvert par la cellule';
+  } else if (d0 === 1 && state.skills && state.skills.includes('discipline')) {
+    d = rollDice(state, 1)[0];
+    note = ` → rattrapé [${d}]`;
+  }
+  log(state, 'dice', `⚙ ÉQUIPE — ${label} : [${d0}]${note}`, { dice: [d0] });
+  return d;
+}
+
 // ---------------- Actions d'équipe ----------------
 export const TEAM_ACTIONS = [
   { id: 'intel', name: 'Renseignement', desc: 'Révèle un indice caché. Pression +1.' },
@@ -872,26 +915,51 @@ export function doTeamAction(state, actionId, targetId = null) {
     return { ok: true };
   }
 
+  let failed = false;
   switch (actionId) {
     case 'intel': {
+      // 1 sur 6 : le plan travaille dans le vide — pression payée quand même
+      const d = teamRoll(state, 'Renseignement');
       changePressure(state, 1);
-      const n = revealClues(state, 1);
-      log(state, 'radio', n ? 'Renseignement : un élément du dossier prend sens.' : 'Renseignement : dossier déjà complet.');
+      if (d === 1) {
+        failed = true;
+        log(state, 'radio', 'Renseignement : à côté. Pression +1.');
+      } else {
+        const n = revealClues(state, 1);
+        log(state, 'radio', n ? 'Renseignement : un élément du dossier prend sens.' : 'Renseignement : dossier déjà complet.');
+      }
       break;
     }
     case 'sniper': {
-      state.prep = Math.min(3, state.prep + 1);
-      log(state, 'radio', `Tireur en position. Préparation : ${state.prep}/3.`);
       if (state.threat >= 5) {
+        // repéré à coup sûr : menace +1, pas de préparation
+        failed = true;
         log(state, 'radio', '⚠ Il a repéré le laser. Il sait.');
         changeThreat(state, 1);
+      } else {
+        const d = teamRoll(state, 'Tireur en position');
+        if (d === 1) {
+          failed = true;
+          log(state, 'radio', 'Le tireur est repéré — menace +1.');
+          changeThreat(state, 1);
+        } else {
+          state.prep = Math.min(3, state.prep + 1);
+          log(state, 'radio', `Tireur en position. Préparation : ${state.prep}/3.`);
+        }
       }
       break;
     }
     case 'supply': {
-      changeThreat(state, -1);
+      // 1 sur 6 : le largage est repéré ou refusé — pression payée quand même
+      const d = teamRoll(state, 'Ravitaillement');
       changePressure(state, 1);
-      log(state, 'radio', 'Ravitaillement déposé. Il respire. Les caméras aussi.');
+      if (d === 1) {
+        failed = true;
+        log(state, 'radio', 'Le ravitaillement est compromis.');
+      } else {
+        changeThreat(state, -1);
+        log(state, 'radio', 'Ravitaillement déposé. Il respire. Les caméras aussi.');
+      }
       break;
     }
     case 'concede': {
@@ -904,9 +972,10 @@ export function doTeamAction(state, actionId, targetId = null) {
     default:
       return { ok: false, reason: 'Action inconnue' };
   }
-  // overrides de mission (effets additionnels déclarés en données)
+  // overrides de mission (effets additionnels déclarés en données) —
+  // pas d'effet bonus quand l'action a échoué
   const ov = mission.teamOverrides && mission.teamOverrides[actionId];
-  if (ov && ov.extraEffects && !state.result) {
+  if (ov && ov.extraEffects && !failed && !state.result) {
     resolveEffect(state, ov.extraEffects, { source: 'team', cause: `Équipe : ${actionId}` });
   }
   return { ok: true };
@@ -1038,6 +1107,28 @@ function startTurn(state, freshAct = false) {
       if (state.result) return;
     }
   }
+  // promesse non tenue : au-delà de 3 tours, il vérifie une fois —
+  // sur 1-2 il comprend le mensonge, sinon la marque expire silencieusement.
+  if (state.flags.promise && !state.result) {
+    const age = state.turn - (state.flags.promiseTurn || state.turn);
+    if (age >= 3) {
+      const d = rollDice(state, 1)[0];
+      log(state, 'dice', `Il se demande si vous avez menti : [${d}]`, { dice: [d] });
+      state.flags.promise = false;
+      if (d <= 2) {
+        log(state, 'taker', pickRandom(state, [
+          'Vous m\'avez menti. Depuis le début. JE LE SAIS.',
+          'Le camion, la promesse, les délais… Il n\'y avait rien. RIEN.',
+          'Votre parole ne vaut plus rien. On va voir ce que valent vos excuses.',
+        ]));
+        log(state, 'sys', '⚠ Il a compris le mensonge. Menace +1.');
+        changeThreat(state, 1);
+        if (state.result) return;
+      } else {
+        log(state, 'sys', 'La promesse tient encore… pour l\'instant.');
+      }
+    }
+  }
   // héros improvisé : une fois par partie, menace ≥ 5, à partir du tour 3
   if (!state.flags.herosDone && state.turn >= 3 && state.threat >= 5 && !state.result) {
     const heros = heldHostages(state).find(h => h.trait === 'heros');
@@ -1080,7 +1171,11 @@ function questionCoherent(state, reply) {
   const c = reply && reply.effects && reply.effects.ifClue;
   if (!c || !c.then) return false;
   const clue = getClue(state, c.id);
-  if (!clue || !clue.revealed) return false;
+  // compétence « lecture_froide » : à la première question posée, les
+  // réponses cohérentes sont marquées même sans indice révélé
+  const lectureFroide = state.skills && state.skills.includes('lecture_froide')
+    && (state.questionsAsked || []).length <= 1;
+  if (!clue || (!clue.revealed && !lectureFroide)) return false;
   const t = c.then;
   return (t.threat || 0) < 0 || (t.pc || 0) > 0 || (t.pcNext || 0) > 0 || (t.free || 0) > 0;
 }
@@ -1208,6 +1303,18 @@ function concedeDemandById(state, demandId) {
 export function getChoice(state) {
   if (!state.pendingChoice) return null;
   const mission = getMissionDef(state);
+  if (state.pendingChoice.hostagePick) {
+    // libération ciblée : choisir quel otage retenu sort
+    return {
+      hostagePick: true,
+      prompt: 'Qui sort ?',
+      options: heldHostages(state).map(h => ({
+        label: `${h.name} — ${h.role}`,
+        desc: h.trait === 'vulnerable' ? 'fragile' : h.trait === 'heros' ? 'imprévisible' : '',
+        hid: h.id,
+      })),
+    };
+  }
   if (state.pendingChoice.questionId) {
     const q = (mission.questions || []).find(q => q.id === state.pendingChoice.questionId);
     if (!q) return null;
@@ -1230,6 +1337,23 @@ export function chooseOption(state, idx) {
   const pc = state.pendingChoice;
   if (!pc) return { ok: false, reason: 'Aucun choix en cours' };
   const mission = getMissionDef(state);
+  if (pc.hostagePick) {
+    const held = heldHostages(state);
+    const h = held[idx];
+    if (!h) return { ok: false, reason: 'Otage invalide' };
+    state.pendingChoice = null;
+    log(state, 'player', `Faites sortir ${h.name}. ${h.f ? 'Elle' : 'Lui'} d\'abord — c\'est mon prix.`);
+    freeHostages(state, 1, { ids: [h.id] });
+    if (state.result) return { ok: true };
+    // plusieurs exfiltrations : on rouvre le choix tant qu'il en reste
+    if (pc.hostagePick > 1 && heldHostages(state).length) {
+      state.pendingChoice = { hostagePick: pc.hostagePick - 1, resume: pc.resume };
+      return { ok: true };
+    }
+    if (pc.resume === 'endTerror') postTerror(state, false);
+    else state.phase = 'conversation';
+    return { ok: true };
+  }
   if (pc.questionId) {
     const q = (mission.questions || []).find(q => q.id === pc.questionId);
     const r = q && q.replies[idx];

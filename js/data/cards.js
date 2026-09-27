@@ -167,6 +167,13 @@ export const MARKET_CARDS = {
     effects: { 0: { threat: 2, pressure: 1 }, 1: { threat: -1 }, 2: { threat: -2 } },
     line: 'Vous voyez les vans noirs devant ? C\'est vous qui décidez s\'ils restent garés.',
   },
+  liberation_ciblee: {
+    id: 'liberation_ciblee', name: 'Exfiltration ciblée', cost: 2, buy: 4, dice: 3,
+    tag: 'autorite', reusable: false,
+    desc: 'Nommer celui qui sort — le blessé, l\'enfant, celle qui n\'en peut plus. 1+ : vous choisissez l\'otage libéré.',
+    effects: { 0: { threat: 1 }, 1: { pickFree: 1 }, 2: { pickFree: 1, threat: -1 } },
+    line: 'Quelqu\'un sort maintenant. Vous me laissez choisir qui — c\'est le signe que vous tenez à votre parole.',
+  },
   mediateur: {
     id: 'mediateur', name: 'Intermédiaire religieux', cost: 2, buy: 3, dice: 4,
     tag: 'empathie', reusable: false,

@@ -337,7 +337,8 @@ export const MISSION_SECTE = {
   ],
 
   market: ['nourriture', 'souffrance', 'dossier_psy', 'mediateur', 'famille', 'humour',
-           'silence_tactique', 'echange', 'verite_brutale', 'mentir_delais', 'promesse', 'monde_avant'],
+           'silence_tactique', 'echange', 'verite_brutale', 'mentir_delais', 'promesse', 'monde_avant',
+           'liberation_ciblee'],
 
   questions: [
     {

@@ -54,7 +54,7 @@ export function botPlay(state) {
   const WANTED = ['nourriture', 'souffrance', 'famille', 'echange', 'humour', 'mediateur',
     'dossier_psy', 'verite_brutale', 'appel_proche', 'promesse', 'mentir_delais',
     'passerelle', 'monde_avant', 'dernier_souffle', 'evac_medicale', 'appel_avocat',
-    'solidarite_detenus', 'silence_tactique', 'bluff_assaut'];
+    'solidarite_detenus', 'silence_tactique', 'bluff_assaut', 'liberation_ciblee'];
   const singles = () => state.hand.filter(id => !getCard(id).reusable && E.canPlayCard(state, id).ok);
   const calmables = () => singles().filter(id => CALM.includes(id));
   let guard = 0;
@@ -92,6 +92,8 @@ export function botPlay(state) {
         continue;
       }
       if (singles().includes('echange') && state.pc >= 3) { E.playCard(state, 'echange'); continue; }
+      // exfiltration ciblée : jouée quand la ligne est calme (échec = menace +1)
+      if (singles().includes('liberation_ciblee') && state.threat <= 3) { E.playCard(state, 'liberation_ciblee'); continue; }
       // 6) pression haute → gagner du temps
       if (state.pressure >= 7 && E.canPlayCard(state, 'gagner_temps').ok) {
         E.playCard(state, 'gagner_temps');

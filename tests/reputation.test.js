@@ -128,8 +128,12 @@ test('assaultAt 9 : failRisk détecte l\'assaut forcé plus tôt', () => {
 test('assaultAt 9 : l\'assaut forcé se déclenche à pression 9', () => {
   const g = E.createGame({ missionId: 'braquage', seed: 7, rep: { hierarchie: 1 } });
   g.pressure = 8;
-  // un tour complet : le tick de fin de tour mène à 9 ≥ assaultAt → ordre d'assaut
-  runTurns(g, 1);
+  // fin de tour déterministe : « Accalmie » n'a ni jet ni effet de pression —
+  // le tick médiatique mène à 9 ≥ assaultAt → ordre d'assaut
+  g.phase = 'team';
+  g.terrorDeck = ['accalmie'];
+  E.endPhase(g);
+  assert.equal(g.pressure, 9);
   assert.equal(g.flags.forcedAssault, true);
 });
 

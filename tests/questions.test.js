@@ -20,7 +20,7 @@ function untilQuestion(s, max = 200) {
 
 // ---------- données ----------
 test('chaque mission a des questions bien formées', () => {
-  const expected = { tutoriel: 1, braquage: 3, hopital: 3, secte: 3, prison: 3, ferry: 3 };
+  const expected = { tutoriel: 1, braquage: 3, hopital: 3, secte: 3, prison: 4, ferry: 3 };
   for (const m of MISSION_LIST) {
     const qs = m.questions || [];
     assert.equal(qs.length, expected[m.id], m.id);

@@ -908,3 +908,35 @@ body[data-tt="7"] #hand, body[data-tt="7"] #game-tabs {
   color: #7a2a2a; margin-bottom: 5px;
 }
 .ctx-line { font-size: 12px; color: #4a3f2c; padding: 2px 0; line-height: 1.4; }
+
+/* ---------- lot 5 : promesse, trophées, journal, export ---------- */
+.clue-card.promise-warn { background: linear-gradient(160deg, #efe0b8, #e0cf9f); border-left: 3px solid var(--amber); }
+.clue-card.promise-warn .cl-desc { color: #6a3a12; font-weight: 600; }
+
+.d-trophy {
+  margin: 8px 0; padding: 7px 10px; font-size: 12.5px; font-weight: 600;
+  color: #6a4a10; background: rgba(255,200,90,.18);
+  border: 1px solid #a89878; border-left: 3px solid var(--amber); border-radius: 3px;
+}
+
+.trophies { display: flex; flex-wrap: wrap; gap: 6px; }
+.trophy {
+  flex: 1 1 44%; min-width: 150px;
+  background: var(--panel); border: 1px solid #222b38; border-radius: 8px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;
+  opacity: .55; filter: grayscale(.7);
+}
+.trophy.on { opacity: 1; filter: none; border-color: var(--amber-dim); background: rgba(255,180,84,.07); }
+.trophy .tr-name { font-size: 12.5px; font-weight: 600; }
+.trophy .tr-desc { font-size: 11px; color: var(--dim); font-style: italic; line-height: 1.35; }
+
+.journal-row { border-bottom-style: dashed; }
+
+.io-card textarea.io-text {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  font-family: var(--mono); font-size: 11px; line-height: 1.4;
+  color: var(--ink, #e8e0cd); background: #0e1520;
+  border: 1px solid #2c3749; border-radius: 6px; padding: 8px;
+  word-break: break-all;
+}
+.io-err { min-height: 16px; color: var(--red, #e23b3b); font-size: 12px; font-family: var(--mono); }

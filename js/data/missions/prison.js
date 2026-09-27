@@ -287,9 +287,25 @@ export const MISSION_PRISON = {
   ],
 
   market: ['verite_brutale', 'dossier_psy', 'souffrance', 'mediateur', 'echange', 'nourriture',
-           'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'appel_avocat', 'solidarite_detenus', 'humour'],
+           'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'appel_avocat', 'solidarite_detenus', 'humour',
+           'liberation_ciblee'],
 
   questions: [
+    {
+      id: 'q_rhodanien', minTurn: 3, act: 0, flag: 'storyComplice',
+      text: '« Morel vous salue. L\'homme du Crédit Rhodanien — il est parmi nous. Il dit que vous, vous tenez parole. C\'est vrai ? »',
+      replies: [
+        { label: '« Il a tenu parole cette nuit-là. Et vous êtes sortis vivants tous les deux. »', tag: 'empathie',
+          answer: 'Il a raconté. Un négociateur qui ne promet que ce qu\'il peut. Alors promettez peu, mais tenez.',
+          effects: { threat: -1 } },
+        { label: '« Demandez-lui comment ça s\'est terminé pour lui. »', tag: 'autorite',
+          answer: 'Debout, mains levées, les caméras. Je sais. C\'est mieux qu\'un sac mortuaire.',
+          effects: { threat: -1, pcNext: 1 } },
+        { label: '« Il a eu son véhicule, non ? Vous pouvez l\'avoir aussi. »', tag: 'ruse',
+          answer: 'Le véhicule, oui. Et les menottes au bout. Morel m\'a raconté la suite aussi.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
     {
       id: 'q_maison', minTurn: 2, act: 0,
       text: '« Vous êtes de quelle maison, vous ? »',

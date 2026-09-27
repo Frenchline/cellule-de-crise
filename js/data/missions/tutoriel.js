@@ -148,7 +148,8 @@ export const MISSION_TUTORIEL = {
   terrorDeck: ['nervosite', 'tut_insuline', 'accalmie', 'tut_pleurs', 'fait_divers', 'souvenir', 'tut_etudiant', 'revelation'],
 
   market: ['nourriture', 'humour', 'famille', 'souffrance', 'dossier_psy', 'verite_brutale',
-           'appel_proche', 'echange', 'mentir_delais', 'silence_tactique', 'mediateur', 'bluff_assaut', 'promesse'],
+           'appel_proche', 'echange', 'mentir_delais', 'silence_tactique', 'mediateur', 'bluff_assaut', 'promesse',
+           'liberation_ciblee'],
 
   questions: [
     {

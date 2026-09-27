@@ -333,7 +333,8 @@ export const MISSION_FERRY = {
   ],
 
   market: ['verite_brutale', 'famille', 'dossier_psy', 'souffrance', 'echange', 'mediateur',
-           'nourriture', 'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'passerelle', 'humour'],
+           'nourriture', 'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'passerelle', 'humour',
+           'liberation_ciblee'],
 
   questions: [
     {

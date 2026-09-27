@@ -9,6 +9,8 @@ import * as AU from './audio.js';
 import * as PIX from './pixel.js';
 import { MISSION_LIST, getMission } from './data/missions/index.js';
 import { getIntro } from './data/cutscenes.js';
+import { repEffective } from './reputation.js';
+import { storyContexts } from './data/story.js';
 import { optionsMultiplier } from './data/options.js';
 import { initCutscene, cutOpen, showCutscene, maybeCutscene, TYPEWRITER_DELAY } from './cutscene.js';
 
@@ -152,6 +154,7 @@ function vigForEntry(e) {
   if (e.k === 'act' && /ACTE [IVX]+/.test(t)) return queueVig('acte', t.replace(/═/g, '').trim());
   if (e.k === 'clue') return queueVig('clue', 'INDICE RÉVÉLÉ');
   if (e.k === 'radio' && t.startsWith('◆ ASSAUT')) return queueVig('assault', 'ASSAUT');
+  if (e.k === 'sys' && t.includes('compris le mensonge')) return queueVig('terror', 'MENSONGE DÉCOUVERT');
 }
 
 function sfxFor(entry) {
@@ -406,10 +409,12 @@ $$('#game-tabs button[data-tab]').forEach(b => {
 $('#transcript').addEventListener('click', () => UI.skipAllTyping());
 
 // ---------------- chrono (option) ----------------
+function chronoBase() { return (game && game.flags && game.flags.chronoBase) || 60; }
+
 function startChrono() {
   stopChrono();
   if (!game.options.chrono || game.phase !== 'conversation' || game.result) return;
-  chronoLeft = 60;
+  chronoLeft = chronoBase();
   chronoTurn = game.turn;
   chronoTimer = setInterval(() => {
     if (!game || game.result || game.phase !== 'conversation') { stopChrono(); return; }
@@ -425,7 +430,7 @@ function startChrono() {
     }
   }, 1000);
 }
-function stopChrono() { if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; } chronoLeft = 60; AU.setTension({ chronoLeft: null }); }
+function stopChrono() { if (chronoTimer) { clearInterval(chronoTimer); chronoTimer = null; } chronoLeft = chronoBase(); AU.setTension({ chronoLeft: null }); }
 
 // ---------------- tutoriel ----------------
 const TUTO_STEPS = [
@@ -554,7 +559,7 @@ function refreshBriefing() {
   UI.renderBriefing(mission, optsSel, (id) => {
     optsSel[id] = !optsSel[id];
     refreshBriefing();
-  }, campaign.rep);
+  }, repEffective(campaign.rep, campaign.skills), storyContexts(campaign, pendingMission));
   $('#btn-brief-intro').hidden = !(illusOn() && getIntro(pendingMission));
   $('#btn-brief-reroll').hidden = !(pendingMission && pendingMission.startsWith('gen:'));
 }
@@ -569,6 +574,7 @@ function launchMission() {
     agentName: campaign.agentName,
     stress: campaign.stress,
     rep: campaign.rep,
+    story: campaign.story,
   });
   logCursor = 0;
   moodEvent = null; moodHold = 0; resultVigShown = false;
@@ -601,12 +607,13 @@ function showDebrief() {
   const mult = optionsMultiplier(game.options);
   const scoreInfo = E.computeScore(game, mult);
   const outcome = game.result.outcome;
-  const { rankUps } = CAM.recordResult(campaign, game.missionId, outcome, scoreInfo, game.hostages, game.options);
+  // recordDaily d'abord : la série de jours (serie7) est à jour pour les trophées
   CAM.recordDaily(campaign, game.missionId, outcome, scoreInfo, game.hostages);
+  const { rankUps, newTrophies } = CAM.recordResult(campaign, game.missionId, outcome, scoreInfo, game.hostages, game.options, game);
   const repReport = CAM.applyReputation(campaign, game.missionId, game);
   if (saveEnabled) { CAM.saveCampaign(campaign); CAM.clearGame(); }
   const rank = CAM.getRank(campaign.xp);
-  UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn(), repReport);
+  UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn(), repReport, newTrophies);
   UI.showScreen('scr-debrief');
   AU.setAmbience('menu');
   AU.playJingle(outcome !== 'defeat');
@@ -767,6 +774,27 @@ $('#btn-reset').addEventListener('click', () => {
   campaign = CAM.defaultCampaign();
   UI.showScreen('scr-agent');
   $('#agent-name').focus();
+});
+
+// ---------------- export / import de la progression ----------------
+$('#btn-export').addEventListener('click', () => {
+  UI.openIOModal('Exporter la progression', { value: CAM.exportSave(campaign), readonly: true });
+});
+$('#btn-import').addEventListener('click', () => {
+  UI.openIOModal('Importer une progression', {
+    okLabel: 'Importer',
+    onOk: (txt, errEl) => {
+      try {
+        campaign = CAM.importSave(txt);
+        CAM.saveCampaign(campaign);
+        UI.closeIOModal();
+        showHQ();
+        alert('Progression importée.');
+      } catch {
+        if (errEl) errEl.textContent = 'Code invalide.';
+      }
+    },
+  });
 });
 
 $('#btn-debrief-ok').addEventListener('click', showHQ);
