@@ -3,6 +3,34 @@
 // Ferry pris d'assaut dans le port de la Joliette, Marseille. 3 actes.
 // ============================================================
 
+// Passagers générés de façon déterministe (pas de RNG) — 6 nommés + 14 générés
+// depuis des pools de noms français (11 enfants, 9 adultes, comme le briefing).
+const P_KIDS = [['Noa', false], ['Gabin', false], ['Sacha', false], ['Maël', false], ['Nolan', false],
+  ['Léa', true], ['Emma', true], ['Chloé', true], ['Mila', true], ['Romane', true]];
+const P_ADULTS = [['Hugo', 'passager', false], ['Camille', 'passagère', true],
+  ['Adam', 'passager', false], ['Inès', 'passagère', true]];
+const P_NOMS = ['Perrin', 'Fabre', 'Collet', 'Marty', 'Navarro', 'Leclerc', 'Masson', 'Berger', 'Faure',
+  'Pons', 'Roche', 'Lucas', 'Baron', 'Vidal'];
+
+function ferryHostages() {
+  const list = [
+    { id: 'matelot', name: 'Karim Belaïd', role: 'matelot', trait: 'heros' },
+    { id: 'enzo', name: 'Enzo Petit', role: 'enfant — 9 ans', trait: 'vulnerable' },
+    { id: 'renee', name: 'Renée Aubrac', role: 'passagère — 74 ans', trait: 'vulnerable', f: true },
+    { id: 'marcel', name: 'Marcel Aubrac', role: 'passager — 76 ans', trait: 'vulnerable' },
+    { id: 'celine', name: 'Céline Vidal', role: 'hôtesse', f: true },
+    { id: 'driss', name: 'Driss Hamadi', role: 'chef mécanicien' },
+  ];
+  P_KIDS.forEach(([p, f], i) => list.push({
+    id: `enfant-${i + 1}`, name: `${p} ${P_NOMS[i]}`, role: `enfant — ${7 + (i % 5)} ans`,
+    trait: 'vulnerable', f,
+  }));
+  P_ADULTS.forEach(([p, role, f], i) => list.push({
+    id: `passager-${i + 1}`, name: `${p} ${P_NOMS[10 + i]}`, role, f,
+  }));
+  return list;
+}
+
 const MIRA = {
   name: 'Mira Castel',
   age: 36,
@@ -122,6 +150,7 @@ export const MISSION_FERRY = {
   duration: '≈ 40–50 min',
   startThreat: 4,
   hostages: 20,
+  hostageList: ferryHostages(),
   pressureEvery: 6,
   scene: 'ferry',
 

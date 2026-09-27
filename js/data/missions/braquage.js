@@ -10,6 +10,14 @@ export const MISSION_BRAQUAGE = {
   type: 'classic',
   startThreat: 4,
   hostages: 6,
+  hostageList: [
+    { id: 'directrice', name: 'Anne Joubert', role: 'directrice d\'agence', f: true },
+    { id: 'guichetiere', name: 'Nadia Ferrand', role: 'guichetière enceinte', trait: 'vulnerable', f: true },
+    { id: 'guichetier1', name: 'Karim Ziani', role: 'guichetier' },
+    { id: 'guichetiere2', name: 'Léa Sarda', role: 'guichetière', f: true },
+    { id: 'client-secu', name: 'Paul Girard', role: 'client — ex-agent de sécurité', trait: 'heros' },
+    { id: 'cliente', name: 'Fatima Rhazi', role: 'cliente', f: true },
+  ],
 
   briefing: [
     'RAPPORT D\'INTERVENTION — SECTION NÉGOCIATION',
@@ -83,7 +91,7 @@ export const MISSION_BRAQUAGE = {
     {
       id: 'fuite', label: 'Véhicule et retrait des tireurs', major: true,
       detail: 'Un fourgon gavé d\'essence et les toits dégagés. La totale.',
-      concede: { effects: { threat: -3, free: 1, pressure: 2 }, text: 'Le fourgon se gare devant l\'agence. Il regarde les toits se vider. Il libère la directrice en otage de bonne foi.' },
+      concede: { effects: { threat: -3, free: 1, pressure: 2 }, text: 'Le fourgon se gare devant l\'agence. Il regarde les toits se vider. Il libère un otage en signe de bonne foi.' },
     },
     {
       id: 'cigarettes', label: 'Cigarettes et eau', major: false,

@@ -8,6 +8,8 @@ import * as CAM from './campaign.js';
 import * as AU from './audio.js';
 import * as PIX from './pixel.js';
 import * as CUT from './pixelcut.js';
+import * as PLANP from './pixelplan.js';
+import * as PLANS from './data/plans.js';
 import { MISSION_LIST, getMission } from './data/missions/index.js';
 import { CUTSCENES, getIntro, pickCutscene } from './data/cutscenes.js';
 import { optionsMultiplier } from './data/options.js';
@@ -465,6 +467,14 @@ const tabHandlers = {
   rules: (sec) => UI.openRules(sec),
 };
 
+// Clic sur le compteur OTAGES → onglet Dossier, section Otages
+$('#game-hud').addEventListener('click', (e) => {
+  if (!game || !e.target.closest('.hud-otages')) return;
+  openTab('dossier');
+  const sec = $('#host-sec');
+  if (sec) sec.scrollIntoView({ block: 'start' });
+});
+
 $('#btn-endphase').addEventListener('click', () => {
   if (!game || game.result) return;
   const prev = game.phase;
@@ -850,6 +860,7 @@ if ('serviceWorker' in navigator) {
     }
     if (mode === 'gallery') { UI.renderGallery(); UI.showScreen('scr-gallery'); return; }
     if (mode === 'cutgallery') { renderCutGallery(); return; }
+    if (mode === 'plangallery') { renderPlanGallery(); return; }
     if (mode.startsWith('cut:')) {
       // #auto:cut:<missionId>:<intro|cléMid>[:<panneau>] — figé pour capture
       const [, mid, key, pi] = mode.split(':');
@@ -947,6 +958,20 @@ if ('serviceWorker' in navigator) {
       syncGameUI(true);
       return;
     }
+    if (mode.startsWith('tabs:')) {
+      // #auto:tabs:<id>:<equipe|dossier>[:intel] — partie en phase d'équipe,
+      // onglet ouvert (option : un Renseignement d'abord → plan dévoilé).
+      const parts = mode.slice(5).split(':');
+      pendingMission = parts[0];
+      launchMission();
+      game.phase = 'team';
+      if (parts[2] === 'intel') E.doTeamAction(game, 'intel');
+      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
+      openTab(parts[1] === 'dossier' ? 'dossier' : 'equipe');
+      const sec = $('#host-sec');
+      if (sec && parts[1] === 'dossier') sec.scrollIntoView({ block: 'start' });
+      return;
+    }
     if (mode.startsWith('layout:')) {
       // mesure le défilement : body ne doit pas défiler, onglets dans l'écran
       const parts = mode.slice(7).split(':');
@@ -980,9 +1005,16 @@ if ('serviceWorker' in navigator) {
     }
     if (mode.startsWith('debrief:')) {
       pendingMission = mode.slice(8); launchMission();
-      // force une fin pour la capture : tous otages sauf 1 libérés, reddition
-      game.hostages.freed = game.hostages.total - 1;
-      game.hostages.remaining = 1;
+      // force une fin pour la capture : quelques libérés, une mort, reddition
+      const hl = E.ensureHostageList(game);
+      const nFree = Math.min(3, Math.max(0, game.hostages.total - 2));
+      const nDead = game.hostages.total > 4 ? 1 : 0;
+      game.hostages.freed = nFree; game.hostages.killed = nDead;
+      game.hostages.remaining = game.hostages.total - nFree - nDead;
+      hl.forEach((h, i) => {
+        if (i < nFree) { h.status = 'freed'; h.turn = i + 2; }
+        else if (i < nFree + nDead) { h.status = 'dead'; h.turn = 5; h.cause = 'Point de rupture'; }
+      });
       game.result = { outcome: 'surrender', turn: game.turn, hostages: { ...game.hostages } };
       game.log.push({ k: 'epilogue', text: getMission(game.missionId).epilogues.surrender });
       showDebrief();
@@ -1001,6 +1033,23 @@ function showCutsceneDebug(mid, key, panelIndex) {
   if (!panels) return;
   const p = Math.min(parseInt(panelIndex || '0', 10) || 0, panels.length - 1);
   showCutscene(panels, null, p, true);   // lignes affichées entières, prêt pour capture
+}
+
+// Grille des plans tactiques (capture) : les 6 bases, plan connu.
+function renderPlanGallery() {
+  const host = $('#gallery-body');
+  host.innerHTML = '';
+  host.append(UI.el('h3', null, 'PLANS TACTIQUES — plan des lieux établi'));
+  const row = UI.el('div', 'gal-row wrap');
+  for (const base of PLANP.PLAN_BASES) {
+    const cell = UI.el('div', 'gal-cell');
+    cell.append(
+      PIX.spriteCanvas(PLANP.planSprite(base, { held: 6, planKnown: true, sniperPost: PLANS.PLANS[base].posts[0].id }, 0), 2),
+      UI.el('div', 'gal-lbl', base));
+    row.append(cell);
+  }
+  host.append(row);
+  UI.showScreen('scr-gallery');
 }
 
 function renderCutGallery() {

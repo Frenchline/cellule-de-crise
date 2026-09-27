@@ -122,6 +122,14 @@ export const MISSION_PRISON = {
   duration: '≈ 35–45 min',
   startThreat: 4,
   hostages: 6,
+  hostageList: [
+    { id: 'surv-bellac', name: 'Marc Bellac', role: 'surveillant' },
+    { id: 'surv-ferhat', name: 'Yanis Ferhat', role: 'surveillant' },
+    { id: 'surv-kaufmann', name: 'Denis Kaufmann', role: 'surveillant' },
+    { id: 'surv-brant', name: 'Olivia Brant', role: 'surveillante', f: true },
+    { id: 'surv-amrani', name: 'Rachid Amrani', role: 'surveillant' },
+    { id: 'infirmiere', name: 'Paulette Ansel', role: 'infirmière — 58 ans', trait: 'vulnerable', f: true },
+  ],
   pressureEvery: 5,
   scene: 'prison',
 

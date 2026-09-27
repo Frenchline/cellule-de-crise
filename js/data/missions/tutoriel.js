@@ -13,6 +13,11 @@ export const MISSION_TUTORIEL = {
   terrorOrdered: false,
   startThreat: 4,
   hostages: 3,
+  hostageList: [
+    { id: 'pharmacienne', name: 'Sonia Mery', role: 'pharmacienne', f: true },
+    { id: 'retraite', name: 'André Coupat', role: 'retraité', trait: 'vulnerable' },
+    { id: 'etudiant', name: 'Lucas Vignal', role: 'étudiant en rayon' },
+  ],
 
   briefing: [
     'RAPPORT D\'INTERVENTION — SECTION NÉGOCIATION',

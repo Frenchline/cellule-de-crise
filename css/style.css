@@ -795,3 +795,40 @@ body[data-tt="7"] #hand, body[data-tt="7"] #game-tabs {
 @media (prefers-reduced-motion: reduce) {
   .cut-next { animation: none; }
 }
+
+/* ---- plan tactique + otages nommés ---- */
+.plan-canvas {
+  display: block; width: 100%; image-rendering: pixelated;
+  border: 1px solid #2a3342; border-radius: 6px; background: #070b12;
+}
+.plan-cap { font-family: var(--mono); font-size: 10px; color: var(--dim); margin: 4px 0 8px; }
+.plan-choices { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.plan-choice {
+  font-family: var(--mono); font-size: 11px; text-align: left; line-height: 1.35;
+  color: var(--ink); background: var(--panel2);
+  border: 1px solid #2a3342; border-radius: 5px; padding: 6px 8px; cursor: pointer;
+}
+.plan-choice b { color: var(--amber); font-weight: 600; }
+.plan-choice:hover:not(:disabled) { border-color: var(--amber-dim); }
+.plan-choice:disabled { opacity: .45; cursor: default; }
+.hud-otages { cursor: pointer; }
+.host-list { margin-top: 4px; }
+.host-row {
+  display: flex; align-items: baseline; gap: 6px;
+  font-family: var(--mono); font-size: 11px; padding: 3px 0;
+  border-bottom: 1px dotted #2a3342;
+}
+.host-icon { width: 16px; flex-shrink: 0; }
+.host-name { flex: 1; }
+.host-dead .host-name { color: var(--red, #e23b3b); text-decoration: line-through; }
+.host-freed .host-name { color: var(--green, #4fbf67); }
+.host-badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 8px; letter-spacing: .4px;
+}
+.host-badge.vulnerable { color: #ffe08a; border: 1px solid #ffe08a66; }
+.host-badge.heros { color: var(--amber); border: 1px solid var(--amber-dim); }
+.host-fate { font-size: 9px; color: var(--dim); }
+.d-hostages { margin-top: 8px; }
+.d-hostages .dh { font-family: var(--mono); font-size: 11px; padding: 2px 0; }
+.d-hostages .host-dead { color: var(--red, #e23b3b); }
+.d-hostages .host-freed { color: var(--green, #4fbf67); }

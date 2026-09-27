@@ -9,6 +9,7 @@ import { TERROR_GENERIC, TERROR_COMPLICE } from './data/terror.js';
 import { getMission } from './data/missions/index.js';
 import { SKILLS } from './data/skills.js';
 import { adviceFor } from './advice.js';
+import { getPlan } from './data/plans.js';
 
 export const PHASES = ['conversation', 'market', 'team'];
 export const PHASE_LABELS = {
@@ -81,6 +82,9 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
     turn: 1,
     threat: mission.startThreat,
     hostages: { total: mission.hostages, remaining: mission.hostages, freed: 0, killed: 0 },
+    hostageList: buildHostageList(mission),
+    planKnown: false,
+    sniperPost: null,
     pc: 0,
     hand: Object.keys(BASE_CARDS),
     usedThisTurn: [],
@@ -152,9 +156,98 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
 
   log(state, 'radio', `— Cellule de crise, ${mission.subtitle}. Ligne ouverte avec ${getTaker(state).name}. —`);
   if (state.flags.wounded) {
-    log(state, 'sys', '⚠ Un otage est blessé : il doit être libéré avant le début du tour 5.');
+    const w = woundedHostage(state);
+    log(state, 'sys', `⚠ ${w.name} (${w.role}) est blessé${w.f ? 'e' : ''} : ${w.f ? 'elle' : 'il'} doit être libéré${w.f ? 'e' : ''} avant le début du tour ${state.flags.woundedDeadline}.`);
   }
   return state;
+}
+
+// ---------------- Otages nommés ----------------
+function buildHostageList(mission) {
+  const src = mission.hostageList || [];
+  const list = [];
+  for (let i = 0; i < mission.hostages; i++) {
+    const h = src[i];
+    list.push({
+      id: h ? h.id : `otage-${i + 1}`,
+      name: h ? h.name : `Otage ${i + 1}`,
+      role: h ? h.role : 'otage',
+      trait: h ? (h.trait || null) : null,
+      f: !!(h && h.f),
+      status: 'held', turn: null, cause: null,
+    });
+  }
+  return list;
+}
+
+// Anciennes sauvegardes sans hostageList : reconstruction à partir des
+// compteurs (les freed premiers dans la liste, puis les killed).
+export function ensureHostageList(state) {
+  const mission = getMissionDef(state);
+  if (!Array.isArray(state.hostageList) || state.hostageList.length !== mission.hostages) {
+    state.hostageList = buildHostageList(mission);
+    let freed = state.hostages.freed, killed = state.hostages.killed;
+    for (const h of state.hostageList) {
+      if (freed > 0) { h.status = 'freed'; freed--; }
+      else if (killed > 0) { h.status = 'dead'; killed--; }
+    }
+  }
+  return state.hostageList;
+}
+
+export function heldHostages(state) {
+  return ensureHostageList(state).filter(h => h.status === 'held');
+}
+
+function woundedHostage(state) {
+  const list = ensureHostageList(state);
+  if (state.flags.woundedId) {
+    const h = list.find(x => x.id === state.flags.woundedId);
+    if (h) return h;
+  }
+  const held = list.filter(h => h.status === 'held');
+  const h = held.find(x => x.trait === 'vulnerable') || held[0] || null;
+  if (h) state.flags.woundedId = h.id;
+  return h;
+}
+
+// Libérés : vulnérables d'abord, sinon ordre de liste. Aucun RNG consommé.
+function pickFreed(state, n, forceIds = null) {
+  const out = [];
+  const take = (h) => { h.status = 'freed'; h.turn = state.turn; out.push(h); };
+  for (const id of forceIds || []) {
+    const h = heldHostages(state).find(x => x.id === id);
+    if (h && out.length < n) take(h);
+  }
+  while (out.length < n) {
+    const held = heldHostages(state);
+    if (!held.length) break;
+    take(held.find(h => h.trait === 'vulnerable') || held[0]);
+  }
+  return out;
+}
+
+// Tués : héros d'abord, sinon index déterministe. Aucun RNG consommé.
+function pickDeaths(state, n, forceIds = null) {
+  const out = [];
+  const take = (h, cause) => { h.status = 'dead'; h.turn = state.turn; if (cause) h.cause = cause; out.push(h); };
+  for (const id of forceIds || []) {
+    const h = heldHostages(state).find(x => x.id === id);
+    if (h && out.length < n) take(h);
+  }
+  while (out.length < n) {
+    const held = heldHostages(state);
+    if (!held.length) break;
+    const heros = held.find(h => h.trait === 'heros');
+    take(heros || held[(state.turn * 7 + (state.hostages.killed + out.length) * 3) % held.length]);
+  }
+  return out;
+}
+
+function deadNames(picked) {
+  const names = picked.map(h => `${h.name} (${h.role})`).join(', ');
+  if (picked.length === 1) return `${names} est ${picked[0].f ? 'tuée' : 'tué'}`;
+  return `${names} sont ${picked.every(h => h.f) ? 'tuées' : 'tués'}`;
 }
 
 // ---------------- Helpers état ----------------
@@ -284,14 +377,16 @@ function changePressure(state, delta) {
   }
 }
 
-export function recordDeaths(state, n, cause = 'Événement') {
+export function recordDeaths(state, n, cause = 'Événement', opts = {}) {
   const k = Math.min(n, state.hostages.remaining);
   if (k <= 0) return 0;
+  const picked = pickDeaths(state, k, opts.ids);
+  for (const h of picked) h.cause = cause;
   state.deaths = state.deaths || [];
-  state.deaths.push({ turn: state.turn, cause, n: k });
-  state.hostages.remaining -= k;
-  state.hostages.killed += k;
-  log(state, 'death', `✝ ${k} otage${k > 1 ? 's' : ''} tué${k > 1 ? 's' : ''}. (${state.hostages.remaining} restant${state.hostages.remaining > 1 ? 's' : ''})`, { cause });
+  state.deaths.push({ turn: state.turn, cause, n: picked.length });
+  state.hostages.remaining -= picked.length;
+  state.hostages.killed += picked.length;
+  log(state, 'death', `✝ ${deadNames(picked)}. (${state.hostages.remaining} restant${state.hostages.remaining > 1 ? 's' : ''})`, { cause });
   const takerLines = getTaker(state).lines || getMissionDef(state).taker.lines;
   if (takerLines && takerLines.kill) {
     log(state, 'taker', pickRandom(state, takerLines.kill));
@@ -299,23 +394,31 @@ export function recordDeaths(state, n, cause = 'Événement') {
   return k;
 }
 
-function killHostages(state, n, cause = 'Événement') {
+function killHostages(state, n, cause = 'Événement', opts = {}) {
   if (state.result || n <= 0) return;
-  recordDeaths(state, n, cause);
+  recordDeaths(state, n, cause, opts);
   checkHostageEnd(state, 'kill');
 }
 
-function freeHostages(state, n) {
+function freeHostages(state, n, opts = {}) {
   if (state.result || n <= 0) return;
   const f = Math.min(n, state.hostages.remaining);
   if (f <= 0) return;
-  state.hostages.remaining -= f;
-  state.hostages.freed += f;
+  const picked = pickFreed(state, f, opts.ids);
+  state.hostages.remaining -= picked.length;
+  state.hostages.freed += picked.length;
   if (state.flags.wounded && !state.flags.woundedSaved) {
-    state.flags.woundedSaved = true;
-    log(state, 'sys', '🚑 L\'otage blessé est parmi les libérés. Il survivra.');
+    const w = woundedHostage(state);
+    if (w && w.status === 'freed') {
+      state.flags.woundedSaved = true;
+      log(state, 'sys', `🚑 ${w.name} est parmi les libéré${w.f ? 'e' : ''}s. ${w.f ? 'Elle' : 'Il'} survivra.`);
+    }
   }
-  log(state, 'sys', `🚪 ${f} otage${f > 1 ? 's' : ''} libéré${f > 1 ? 's' : ''}. (${state.hostages.remaining} restant${state.hostages.remaining > 1 ? 's' : ''})`);
+  const names = picked.map(h => `${h.name} (${h.role})`).join(', ');
+  const verb = picked.length === 1
+    ? `est ${picked[0].f ? 'libérée' : 'libéré'}`
+    : `sont ${picked.every(h => h.f) ? 'libérées' : 'libérés'}`;
+  log(state, 'sys', `🚪 ${names} ${verb}. (${state.hostages.remaining} restant${state.hostages.remaining > 1 ? 's' : ''})`);
   const takerLines = getTaker(state).lines || getMissionDef(state).taker.lines;
   if (takerLines && takerLines.freed) {
     log(state, 'taker', pickRandom(state, takerLines.freed));
@@ -716,7 +819,7 @@ export function buyCard(state, slotIndex) {
 // ---------------- Actions d'équipe ----------------
 export const TEAM_ACTIONS = [
   { id: 'intel', name: 'Renseignement', desc: 'Révèle un indice caché. Pression +1.' },
-  { id: 'sniper', name: 'Positionner le tireur', desc: 'Préparation +1 (max 3). Si menace ≥ 5, il vous repère : menace +1.' },
+  { id: 'sniper', name: 'Positionner le tireur', desc: 'Préparation +1 ou +2 selon le poste (max 3). Repéré si la menace atteint son seuil : menace +1.' },
   { id: 'supply', name: 'Ravitaillement', desc: 'Nourriture, eau, couvertures. Menace −1, pression +1.' },
   { id: 'concede', name: 'Concéder une demande', desc: 'Satisfaire une demande en attente (choix).', needsTarget: true },
   { id: 'assault', name: 'Donner l\'assaut', desc: 'Fin de mission : résolution tactique selon la préparation.', danger: true },
@@ -739,6 +842,12 @@ export function doTeamAction(state, actionId, targetId = null) {
     const d = getDemand(state, targetId);
     if (!d || d.status !== 'pending') return { ok: false, reason: 'Demande invalide' };
   }
+  if (actionId === 'assault' && targetId) {
+    const e = getPlan(state).entries.find(x => x.id === targetId);
+    if (e && e.needsPlan && !state.planKnown) {
+      return { ok: false, reason: `Entrée « ${e.name} » : plan des lieux requis (Renseignement)` };
+    }
+  }
   const mission = getMissionDef(state);
   const extra = (mission.extraTeamActions || []).find(a => a.id === actionId);
   if (!extra && !TEAM_ACTIONS.some(a => a.id === actionId)) return { ok: false, reason: 'Action inconnue' };
@@ -759,12 +868,19 @@ export function doTeamAction(state, actionId, targetId = null) {
       changePressure(state, 1);
       const n = revealClues(state, 1);
       log(state, 'radio', n ? 'Renseignement : un élément du dossier prend sens.' : 'Renseignement : dossier déjà complet.');
+      if (!state.planKnown) {
+        state.planKnown = true;
+        log(state, 'radio', 'Renseignement : plan des lieux et position des otages établis.');
+      }
       break;
     }
     case 'sniper': {
-      state.prep = Math.min(3, state.prep + 1);
-      log(state, 'radio', `Tireur en position. Préparation : ${state.prep}/3.`);
-      if (state.threat >= 5) {
+      const plan = getPlan(state);
+      const post = plan.posts.find(p => p.id === targetId) || plan.posts[0];
+      state.prep = Math.min(3, state.prep + post.prep);
+      state.sniperPost = post.id;
+      log(state, 'radio', `Tireur en position (${post.name}). Préparation : ${state.prep}/3.`);
+      if (state.threat >= post.detectAt) {
         log(state, 'radio', '⚠ Il a repéré le laser. Il sait.');
         changeThreat(state, 1);
       }
@@ -781,7 +897,7 @@ export function doTeamAction(state, actionId, targetId = null) {
       break;
     }
     case 'assault': {
-      return resolveAssault(state, 'volontaire');
+      return resolveAssault(state, 'volontaire', targetId);
     }
     default:
       return { ok: false, reason: 'Action inconnue' };
@@ -903,11 +1019,37 @@ function startTurn(state) {
   state.usedThisTurn = [];
   state.teamActionsLeft = 1;
   // otage blessé
-  if (state.flags.wounded && !state.flags.woundedSaved && state.turn >= state.flags.woundedDeadline) {
-    log(state, 'death', '✝ L\'otage blessé n\'a pas tenu. Il est mort de ses blessures.');
-    state.flags.wounded = false;
-    killHostages(state, 1, 'Blessures (otage blessé)');
-    if (state.result) return;
+  if (state.flags.wounded && !state.flags.woundedSaved && !state.result) {
+    const w = woundedHostage(state);
+    if (!w || w.status !== 'held') {
+      state.flags.wounded = false;
+    } else if (state.turn >= state.flags.woundedDeadline) {
+      log(state, 'death', `✝ ${w.name} n'a pas tenu. ${w.f ? 'Elle' : 'Il'} est mort${w.f ? 'e' : ''} de ses blessures.`);
+      state.flags.wounded = false;
+      killHostages(state, 1, `Blessures (${w.name})`, { ids: [w.id] });
+      if (state.result) return;
+    }
+  }
+  // héros improvisé : une fois par partie, menace ≥ 5, à partir du tour 3
+  if (!state.flags.herosDone && state.turn >= 3 && state.threat >= 5 && !state.result) {
+    const heros = heldHostages(state).find(h => h.trait === 'heros');
+    if (heros) {
+      state.flags.herosDone = true;
+      log(state, 'terror', `⚠ ${heros.name} tente quelque chose…`);
+      const d = rollDice(state, 1)[0];
+      log(state, 'dice', `Tentative de ${heros.name} : [${d}]`, { dice: [d] });
+      if (d === 1) {
+        killHostages(state, 1, `Tentative de ${heros.name}`, { ids: [heros.id] });
+        if (state.result) return;
+      } else if (d <= 4) {
+        log(state, 'radio', 'Il se fait maîtriser. Le preneur est hors de lui.');
+        changeThreat(state, 1);
+        if (state.result) return;
+      } else {
+        log(state, 'radio', 'Il profite d\'un moment d\'inattention et franchit la sortie en courant.');
+        freeHostages(state, 1, { ids: [heros.id] });
+      }
+    }
   }
   state.pc = computePC(state);
   log(state, 'sys', `═══ TOUR ${state.turn} — ${state.pc} PC ═══`);
@@ -1076,10 +1218,21 @@ export function assaultRisk(state) {
   return risk;
 }
 
-export function resolveAssault(state, kind = 'volontaire') {
+export function assaultOdds(state, entryId = null) {
+  const plan = getPlan(state);
+  const entry = plan.entries.find(e => e.id === entryId) || plan.entries[0];
+  const risk = Math.max(1, assaultRisk(state) + (entry.riskMod || 0));
+  const per = risk / 6;
+  return { entry, risk, perHostageDeath: per, expectedDeaths: per * state.hostages.remaining };
+}
+
+export function resolveAssault(state, kind = 'volontaire', entryId = null) {
+  const { entry, risk } = assaultOdds(state, entryId);
+  if (entry.needsPlan && !state.planKnown) {
+    return { ok: false, reason: `Entrée « ${entry.name} » : plan des lieux requis (Renseignement)` };
+  }
   const h = state.hostages.remaining;
-  const risk = assaultRisk(state);
-  log(state, 'radio', `◆ ASSAUT — risque ${risk}/6 par otage (préparation ${state.prep}).`);
+  log(state, 'radio', `◆ ASSAUT — entrée « ${entry.name} » — risque ${risk}/6 par otage (préparation ${state.prep}).`);
   const dice = rollDice(state, h);
   let killed = 0;
   for (const d of dice) if (d <= risk) killed++;
@@ -1091,10 +1244,10 @@ export function resolveAssault(state, kind = 'volontaire') {
   if (state.hostages.freed === 0 && state.hostages.remaining <= 0) {
     return endGame(state, 'defeat');
   }
-  // issue sombre si préparation 0
+  // issue sombre si préparation 0 (l'effraction prévient le preneur : 1–2)
   if (state.prep === 0) {
     const d = rollDice(state, 1)[0];
-    if (d === 1) {
+    if ((entry.escapeOn || [1]).includes(d)) {
       state.flags.escape = true;
       return endGame(state, 'escape');
     }

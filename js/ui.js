@@ -8,11 +8,13 @@ import { OPTION_LIST } from './data/options.js';
 import {
   PHASE_LABELS, canPlayCard, cardDicePool, diceModifier, describeEffects,
   canBuy, teamActionsLeft, getDemandDef, getClueDef, pendingDemands,
-  getMissionDef, threatLabelFr, assaultRisk, getTaker, roman, getChoice,
-  cardOdds, failRisk,
+  getMissionDef, threatLabelFr, getTaker, roman, getChoice,
+  cardOdds, failRisk, ensureHostageList, assaultOdds,
 } from './engine.js';
 import { getRank, RANKS, missionUnlocked } from './campaign.js';
 import * as PIX from './pixel.js';
+import * as PLANS from './pixelplan.js';
+import { getPlan, sceneBase } from './data/plans.js';
 import { MISSION_LIST } from './data/missions/index.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
@@ -203,7 +205,8 @@ export function renderHUD(state) {
   hud.append(c1);
 
   // otages
-  const c2 = el('div', 'hud-cell');
+  const c2 = el('div', 'hud-cell hud-otages');
+  c2.title = 'Liste des otages (Dossier)';
   c2.append(el('div', 'h-label', 'OTAGES'));
   c2.append(el('div', 'h-val h-nowrap', `${state.hostages.remaining}⛓ ${state.hostages.freed}✓ ${state.hostages.killed}†`));
   hud.append(c2);
@@ -449,12 +452,28 @@ export function renderTab(state, tab, handlers) {
 
   if (tab === 'equipe') {
     p.append(el('h4', null, `ÉQUIPE — ${teamActionsLeft(state)} action(s) restante(s)`));
+
+    // plan tactique
+    const plan = getPlan(state);
+    const pcv = document.createElement('canvas');
+    pcv.className = 'plan-canvas';
+    PIX.renderSprite(pcv, PLANS.planSprite(sceneBase(getSceneId(state)), {
+      held: state.hostages.remaining,
+      planKnown: state.planKnown,
+      sniperPost: state.sniperPost,
+    }, Math.floor(Date.now() / 500) % 2));
+    p.append(pcv);
+    p.append(el('div', 'plan-cap', state.planKnown
+      ? 'Position des otages établie (Renseignement).'
+      : 'Position des otages inconnue — lancez un Renseignement.'));
+
+    const canAct = state.phase === 'team' && teamActionsLeft(state) > 0;
     const acts = [
-      { id: 'intel', name: 'Renseignement', desc: 'Révèle un indice caché. Pression +1.' },
-      { id: 'sniper', name: 'Positionner le tireur', desc: `Préparation +1 (act. ${state.prep}/3). Si menace ≥ 5 : menace +1.` },
+      { id: 'intel', name: 'Renseignement', desc: 'Révèle un indice caché + établit le plan des lieux. Pression +1.' },
+      { id: 'sniper', name: 'Positionner le tireur', desc: `Préparation ${state.prep}/3 — choisir un poste.`, posts: true },
       { id: 'supply', name: 'Ravitaillement', desc: 'Menace −1. Pression +1.' },
       ...(getMissionDef(state).extraTeamActions || []),
-      { id: 'assault', name: 'Donner l\'assaut', desc: `Fin de mission. Risque ${assaultRisk(state)}/6 par otage.`, danger: true },
+      { id: 'assault', name: 'Donner l\'assaut', desc: 'Fin de mission — choisir l\'axe d\'entrée.', danger: true, entries: true },
     ];
     for (const a of acts) {
       const d = el('div', 'team-card');
@@ -468,8 +487,40 @@ export function renderTab(state, tab, handlers) {
         nm.append(info);
       }
       row.append(nm);
+      if (a.posts) {
+        d.append(row, el('div', 't-desc', a.desc));
+        const wrap = el('div', 'plan-choices');
+        plan.posts.forEach(post => {
+          const ch = el('button', 'plan-choice');
+          ch.append(el('b', null, post.name), document.createTextNode(` — ${post.desc}`));
+          ch.disabled = !canAct || state.prep >= 3;
+          ch.addEventListener('click', () => handlers.team('sniper', post.id));
+          wrap.append(ch);
+        });
+        d.append(wrap);
+        p.append(d);
+        continue;
+      }
+      if (a.entries) {
+        d.append(row, el('div', 't-desc', a.desc));
+        const wrap = el('div', 'plan-choices');
+        plan.entries.forEach(e => {
+          const o = assaultOdds(state, e.id);
+          const locked = e.needsPlan && !state.planKnown;
+          const ch = el('button', 'plan-choice');
+          ch.append(el('b', null, e.name), document.createTextNode(locked
+            ? ` — plan des lieux requis`
+            : ` — risque ${o.risk}/6 par otage · ~${o.expectedDeaths.toFixed(1).replace('.', ',')} mort attendu sur ${state.hostages.remaining}`));
+          ch.disabled = !canAct || locked;
+          ch.addEventListener('click', () => handlers.team('assault', e.id));
+          wrap.append(ch);
+        });
+        d.append(wrap);
+        p.append(d);
+        continue;
+      }
       const btn = el('button', `btn btn-small${a.danger ? '' : ' btn-primary'}`, 'Lancer');
-      if (state.phase !== 'team' || teamActionsLeft(state) <= 0 || a.id === 'sniper' && state.prep >= 3) btn.disabled = true;
+      if (!canAct) btn.disabled = true;
       btn.addEventListener('click', () => handlers.team(a.id, null));
       row.append(btn);
       d.append(row, el('div', 't-desc', a.desc));
@@ -510,6 +561,24 @@ export function renderTab(state, tab, handlers) {
       c.append(el('div', 'cl-desc', line));
       p.append(c);
     }
+    // otages nommés
+    const hsec = el('div', 'host-list');
+    hsec.id = 'host-sec';
+    hsec.append(el('h4', null, `OTAGES — ${state.hostages.remaining} retenu${state.hostages.remaining > 1 ? 's' : ''}`));
+    for (const h of ensureHostageList(state)) {
+      const row = el('div', `host-row host-${h.status}`);
+      row.append(el('span', 'host-icon', h.status === 'freed' ? '🚪' : h.status === 'dead' ? '✝' : '⛓'));
+      const nm = el('span', 'host-name');
+      nm.textContent = `${h.name} — ${h.role}`;
+      row.append(nm);
+      if (h.trait) row.append(el('span', `host-badge ${h.trait}`, h.trait === 'vulnerable' ? 'fragile' : 'imprévisible'));
+      if (h.status !== 'held') {
+        row.append(el('span', 'host-fate', h.status === 'freed' ? `sorti${h.f ? 'e' : ''} (tour ${h.turn})` : `tué${h.f ? 'e' : ''} (tour ${h.turn})`));
+      }
+      hsec.append(row);
+    }
+    p.append(hsec);
+
     p.append(el('h4', null, 'INDICES PSYCHOLOGIQUES'));
     for (const c of state.clues) {
       const def = getClueDef(state, c.id);
@@ -681,10 +750,22 @@ export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankU
     bilan.append(el('div', 'bl-act',
       `Acte atteint : ${roman(state.act + 1)}/${roman(mission.acts.length)} — ${mission.acts[state.act].title}`));
   }
+  // sort individuel des otages
+  if (Array.isArray(state.hostageList) && state.hostageList.length) {
+    const nl = el('div', 'd-hostages');
+    for (const h of state.hostageList) {
+      const fate = h.status === 'freed' ? `🚪 libéré${h.f ? 'e' : ''}`
+        : h.status === 'dead' ? `✝ tué${h.f ? 'e' : ''} — tour ${h.turn ?? '?'}${h.cause ? ` · ${h.cause}` : ''}`
+        : res.outcome !== 'defeat' ? `✔ sorti${h.f ? 'e' : ''} vivant${h.f ? 'e' : ''}`
+        : `— non libéré${h.f ? 'e' : ''}`;
+      nl.append(el('div', `dh host-${h.status}`, `${fate} — ${h.name} (${h.role})`));
+    }
+    bilan.append(nl);
+  }
   if (state.deaths && state.deaths.length) {
     const dl = el('div', 'd-deaths');
     for (const d of state.deaths) {
-      dl.append(el('div', 'dd', `✝ Tour ${d.turn} — ${d.cause}${d.n > 1 ? ` (×${d.n})` : ''}`));
+      dl.append(el('div', 'dd', `✝ Tour ${d.turn} — ${d.cause}${d.names ? ` : ${d.names.join(', ')}` : ''}`));
     }
     bilan.append(dl);
   }
@@ -858,11 +939,11 @@ export const RULES = [
     id: 'sec-actions', title: 'Actions d\'équipe',
     body: [
       'Une action d\'équipe par tour, en phase « Action d\'équipe ».',
-      '<b>RENSEIGNEMENT</b> — révèle un indice du dossier (bonus de dés, nouvelles cartes possibles). Coût : pression +1.',
-      '<b>POSITIONNER LE TIREUR</b> — préparation +1 (max 3), indispensable pour un assaut sûr. Risque : si menace ≥ 5, il repère le laser → menace +1.',
+      '<b>RENSEIGNEMENT</b> — révèle un indice du dossier (bonus de dés, nouvelles cartes possibles) et établit le <b>plan des lieux</b> (position des otages sur le plan, entrée discrète débloquée). Coût : pression +1.',
+      '<b>POSITIONNER LE TIREUR</b> — deux postes au choix : <b>sûr</b> (préparation +1, repéré si menace ≥ 5) ou <b>exposé</b> (préparation +2, repéré dès menace 4). Préparation max 3, indispensable pour un assaut sûr. Repéré = menace +1.',
       '<b>RAVITAILLEMENT</b> — menace −1 (et effet bonus dans certains scénarios). Coût : pression +1.',
       '<b>CONCÉDER UNE DEMANDE</b> — applique les effets de la demande. Une concession majeure coûte −100 pts au score.',
-      '<b>DONNER L\'ASSAUT</b> — fin de mission immédiate. Pour CHAQUE otage restant, un dé : il meurt sur ≤ risque. Risque = <code>max(1, 3 − préparation)</code>, +1 si menace ≥ 6 (ex. préparation 2 → risque 1/6 ; préparation 0 → 3/6, voire 4/6 sous haute menace). À préparation 0, une issue sombre supplémentaire est possible (fuite du preneur sur un jet de 1).',
+      '<b>DONNER L\'ASSAUT</b> — fin de mission immédiate sur l\'axe d\'entrée choisi. Pour CHAQUE otage restant, un dé : il meurt sur ≤ risque. Risque = <code>max(1, 3 − préparation)</code>, +1 si menace ≥ 6, + modificateur de l\'entrée (ex. préparation 2 → risque 1/6). Trois axes : <b>entrée principale</b> (risque inchangé), <b>entrée discrète</b> (risque −1, nécessite le plan des lieux), <b>effraction</b> (risque −1, mais le preneur est prévenu : à préparation 0, sa fuite est possible sur un jet de 1–2 au lieu de 1). L\'assaut forcé (pression 10) et l\'Heure H empruntent toujours l\'entrée principale.',
       'Certains scénarios ajoutent des actions propres (démineurs…) ou modifient les vôtres.',
     ],
   },

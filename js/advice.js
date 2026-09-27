@@ -8,7 +8,7 @@
 // ============================================================
 
 import { TAGS } from './data/cards.js';
-import { pendingDemands, getDemandDef, getClueDef, getMissionDef } from './engine.js';
+import { pendingDemands, getDemandDef, getClueDef, getMissionDef, ensureHostageList } from './engine.js';
 
 export function adviceFor(state, seen = {}) {
   if (!state || state.result) return null;
@@ -60,6 +60,15 @@ export function adviceFor(state, seen = {}) {
       })(),
       text: () => `Plus que ${state.terrorDeck.length} carte${state.terrorDeck.length > 1 ? 's' : ''} Terreur avant l'Heure H. Il faut conclure : faites baisser la menace et tentez la reddition.`,
     },
+    // 5b. Un otage fragile est encore retenu (à partir du tour 2).
+    {
+      key: 'vulnerable',
+      ok: state.turn >= 2 && ensureHostageList(state).some(h => h.status === 'held' && h.trait === 'vulnerable'),
+      text: () => {
+        const v = ensureHostageList(state).find(h => h.status === 'held' && h.trait === 'vulnerable');
+        return `${v.name} (${v.role}) est ${v.f ? 'la' : 'le'} plus fragile. Obtenez sa libération en priorité.`;
+      },
+    },
     // 6. Dossier incomplet + Écoute active en main.
     {
       key: 'indices',
@@ -92,6 +101,13 @@ export function adviceFor(state, seen = {}) {
         ? `Son profil (${def.name}) : les cartes ${label} gagnent un dé.`
         : `Son profil (${def.name}) : les cartes ${label} perdent un dé, évitez-les.`;
       return { key, text };
+    }
+    if (r.key === 'vulnerable') {
+      // règle 5b : key dépend de l'otage visé
+      const v = ensureHostageList(state).find(h => h.status === 'held' && h.trait === 'vulnerable');
+      const key = `vulnerable_${v.id}`;
+      if (!due(key)) continue;
+      return { key, text: r.text() };
     }
     if (!due(r.key)) continue;
     return { key: r.key, text: r.text() };

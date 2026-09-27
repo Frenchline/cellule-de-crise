@@ -10,6 +10,13 @@ export const MISSION_HOPITAL = {
   type: 'classic',
   startThreat: 5,
   hostages: 5,
+  hostageList: [
+    { id: 'infirmiere1', name: 'Claire Vasseau', role: 'infirmière de réa', f: true },
+    { id: 'infirmiere2', name: 'Meriem Attia', role: 'infirmière diabétique', trait: 'vulnerable', f: true },
+    { id: 'aide', name: 'Bruno Lefort', role: 'aide-soignant' },
+    { id: 'interne', name: 'Julie Roche', role: 'interne', trait: 'heros', f: true },
+    { id: 'cadre', name: 'Serge Devos', role: 'cadre de santé' },
+  ],
 
   briefing: [
     'RAPPORT D\'INTERVENTION — SECTION NÉGOCIATION',
