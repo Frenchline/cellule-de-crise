@@ -151,6 +151,54 @@ export const MISSION_BRAQUAGE = {
   market: ['verite_brutale', 'famille', 'promesse', 'echange', 'bluff_assaut', 'mediateur',
            'dossier_psy', 'souffrance', 'mentir_delais', 'appel_proche', 'humour', 'silence_tactique', 'nourriture'],
 
+  questions: [
+    {
+      id: 'q_toit', minTurn: 2,
+      text: '« Vos hommes sur le toit. Ils vont tirer ? »',
+      replies: [
+        { label: '« Pas tant que vous parlez. Je vous donne ma parole. »', tag: 'ruse',
+          answer: 'Votre parole… on verra ce qu\'elle vaut.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+        { label: '« Si je vous dis non, vous ne me croiriez pas. »', tag: 'autorite',
+          answer: 'Non. Mais au moins vous ne m\'avez pas menti.',
+          effects: { ifClue: { id: 'b_legion', then: { threat: -1 }, else: { threat: 1 } } } },
+        { label: '« Ils font leur travail. Vous, faites le vôtre : écoutez-moi. »', tag: 'pression',
+          answer: 'Mon travail ? Vous appelez ça un travail ?',
+          effects: { threat: 1 } },
+      ],
+    },
+    {
+      id: 'q_agence', minTurn: 4,
+      text: '« Vous vous demandez pourquoi cette agence. Pas une autre. »',
+      replies: [
+        { label: '« Parce que Nolan fait ses comptes ici, non ? »', tag: 'ruse',
+          answer: '…Qui vous a parlé de Nolan ?',
+          effects: { ifClue: { id: 'b_fils', then: { threat: -1, pc: 1 }, else: { threat: 1 } } } },
+        { label: '« Peu importe le lieu. Ce qui compte, c\'est vous. »', tag: 'empathie',
+          answer: 'Moi. Il ne reste que moi, ouais.',
+          effects: { threat: -1 } },
+        { label: '« J\'imagine que vous l\'aviez bien repérée. Bien joué. »', tag: 'pression',
+          answer: 'Bien joué ? J\'ai six personnes dans une banque, vous croyez que je joue ?',
+          effects: { threat: 1 } },
+      ],
+    },
+    {
+      id: 'q_nolan', minTurn: 6,
+      text: '« Nolan croit que je suis en déplacement. Qu\'est-ce que je lui raconte ? »',
+      replies: [
+        { label: '« La vérité, quand vous serez sorti. Sortons-en vivants d\'abord. »', tag: 'empathie',
+          answer: 'La vérité… Il faudrait déjà que je sache laquelle.',
+          effects: { ifClue: { id: 'b_fils', then: { threat: -1, pc: 1 }, else: {} } } },
+        { label: '« Appelez-le. Maintenant. Il doit entendre votre voix. »', tag: 'pression',
+          answer: 'Il entendrait son père tenir une agence ?! Vous êtes malade.',
+          effects: { threat: 1 } },
+        { label: '« Qu\'il a un père courageux. On arrangera ça. »', tag: 'ruse',
+          answer: 'Courageux. C\'est le mot, ouais. C\'est le mot.',
+          effects: { pcNext: 1, pressure: 1 } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Julien Morel est sorti en formation carrée, mains sur la tête, ex-militaire jusqu\'au bout. Le fourgon est resté garé. Il n\'a pas regardé en arrière. Nolan ne verra jamais les images.',
     liberation: 'Les six otages sont sortis les uns après les autres. Seul dans l\'agence vidée, le Chat s\'est assis par terre, dos à la caisse, et a attendu. On l\'a trouvé comme ça : enfin au repos.',

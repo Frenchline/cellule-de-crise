@@ -150,6 +150,24 @@ export const MISSION_TUTORIEL = {
   market: ['nourriture', 'humour', 'famille', 'souffrance', 'dossier_psy', 'verite_brutale',
            'appel_proche', 'echange', 'mentir_delais', 'silence_tactique', 'mediateur', 'bluff_assaut', 'promesse'],
 
+  questions: [
+    {
+      id: 'q_mot', minTurn: 2,
+      text: '« Vous êtes payé combien, pour écouter un type comme moi ? »',
+      replies: [
+        { label: '« Peu importe. Posez le revolver et on n\'en parle plus. »', tag: 'autorite',
+          answer: 'Vous voyez ! Tout le monde veut juste que ça s\'arrête !',
+          effects: { threat: 1 } },
+        { label: '« Je suis payé pour que personne ne se fasse mal, Thomas. Vous y compris. »', tag: 'empathie',
+          answer: '…Ouais. Vous dites ça comme si c\'était vrai.',
+          effects: { threat: -1 } },
+        { label: '« Plus que l\'inspecteur qui a monté votre dossier. »', tag: 'ruse',
+          answer: 'C\'est censé me faire rire ?',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Thomas Réal est sorti à 02h41, les mains vides, un thermos d\'insuline serré contre lui. Lina ne saura rien de cette nuit avant longtemps. Le parquet décidera. Vous, vous dormirez.',
     liberation: 'Le dernier otage a franchi le cordon à 02h10. Thomas Réal, seul dans la pharmacie éclairée au néon, a posé son revolver sur le comptoir et attendu. Vous étiez en ligne quand les hommes sont entrés.',

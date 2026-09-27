@@ -14,6 +14,14 @@
 <script>
   const q = new URLSearchParams(location.search);
   const w = parseInt(q.get('w') || '390', 10), h = parseInt(q.get('h') || '844', 10);
+  // ?wait=N : retarde le load via tools/audiowait.py (:8099) pour laisser
+  // les vérifications en temps réel (tutocheck…) finir avant --dump-dom.
+  if (q.get('wait')) {
+    const img = document.createElement('img');
+    img.src = 'http://localhost:8099/wait.png?s=' + q.get('wait');
+    img.style.display = 'none';
+    document.body.appendChild(img);
+  }
   const f = document.getElementById('app');
   f.width = w; f.height = h;
   f.src = q.get('src') || '/';

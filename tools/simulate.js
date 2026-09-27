@@ -9,11 +9,23 @@ import { MISSION_LIST } from '../js/data/missions/index.js';
 
 const N = parseInt(process.argv[2] || '2000', 10);
 
-// Choisit l'option de dilemme la moins dangereuse (bot pacifiste)
+// Choisit l'option de dilemme la moins dangereuse (bot pacifiste).
+// Les effets conditionnels ifClue sont résolus d'après l'état réel :
+// la branche « then » vaut si l'indice est révélé, sinon « else ».
 function pickChoice(state, ch) {
+  const flat = (o) => {
+    const fx = { ...(o.effects || {}) };
+    if (fx.ifClue) {
+      const c = fx.ifClue;
+      delete fx.ifClue;
+      const clue = E.getClue(state, c.id);
+      Object.assign(fx, clue && clue.revealed ? (c.then || {}) : (c.else || {}));
+    }
+    return fx;
+  };
   let best = 0, bestScore = Infinity;
   ch.options.forEach((o, i) => {
-    const fx = o.effects || {};
+    const fx = flat(o);
     let s = 0;
     if (fx.assault) s += 100;
     if (fx.lose) s += 100;
@@ -24,6 +36,10 @@ function pickChoice(state, ch) {
     }
     if (fx.pressure) s += 2 * fx.pressure;
     if (fx.threat) s += fx.threat;
+    if (fx.pcNext) s -= 0.5 * fx.pcNext;
+    if (fx.pc) s -= fx.pc;
+    if (fx.free) s -= 3 * fx.free;
+    if (fx.mark === 'promesse') s += 1.5;
     if (s < bestScore) { bestScore = s; best = i; }
   });
   return best;
@@ -181,4 +197,24 @@ for (const m of MISSION_LIST) {
   console.log(`  → sans défaite : ${noDefeat.toFixed(1)}%  |  victoire non-assaut : ${nonAssault.toFixed(1)}%`);
   console.log(`  otages sauvés moy. : ${r.avgSaved.toFixed(2)}/${m.hostages} · tués moy. : ${r.avgKilled.toFixed(2)} · tours moy. : ${r.avgTurns.toFixed(1)}\n`);
 }
+
+// 500 missions générées — liste de seeds fixe pour la reproductibilité.
+const GEN_SEEDS = [];
+for (let i = 0; i < 50; i++) GEN_SEEDS.push(1000 + i * 7919);
+const GN = 10; // parties par seed → 500 au total
+const agg = { surrender: 0, liberation: 0, assault: 0, escape: 0, defeat: 0 };
+let tot = 0;
+console.log('■ Missions générées (50 seeds × 10 parties)');
+for (const seed of GEN_SEEDS) {
+  const r = simulate(`gen:${seed}`, GN);
+  for (const k of Object.keys(agg)) agg[k] += r.out[k];
+  tot += GN;
+}
+const pctG = k => (100 * agg[k] / tot).toFixed(1) + '%';
+console.log(`  reddition   ${pctG('surrender')}`);
+console.log(`  libération  ${pctG('liberation')}`);
+console.log(`  assaut      ${pctG('assault')}`);
+console.log(`  fuite       ${pctG('escape')}`);
+console.log(`  défaite     ${pctG('defeat')}`);
+console.log(`  → sans défaite : ${(100 * (tot - agg.defeat) / tot).toFixed(1)}%  |  victoire non-assaut : ${(100 * (agg.surrender + agg.liberation) / tot).toFixed(1)}%`);
 }

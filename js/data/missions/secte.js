@@ -339,6 +339,54 @@ export const MISSION_SECTE = {
   market: ['nourriture', 'souffrance', 'dossier_psy', 'mediateur', 'famille', 'humour',
            'silence_tactique', 'echange', 'verite_brutale', 'mentir_delais', 'promesse', 'monde_avant'],
 
+  questions: [
+    {
+      id: 'q_enfants', minTurn: 2, act: 0,
+      text: '« Vous entendez les enfants, derrière moi ? Dites-leur de dormir. »',
+      replies: [
+        { label: '« Ils dorment mieux quand les adultes parlent bas, Sabine. »', tag: 'empathie',
+          answer: '…Je sais. Ils ont l\'habitude de moi.',
+          effects: { ifClue: { id: 's_enfants', then: { threat: -1 }, else: {} } } },
+        { label: '« Dites-leur vous-même. Puis ouvrez le portail. »', tag: 'autorite',
+          answer: 'Le portail reste fermé. Ils sont en sécurité ICI.',
+          effects: { threat: 1 } },
+        { label: '« Les caméras sont coupées depuis une heure, ils ne voient rien. »', tag: 'ruse',
+          answer: 'Bien. Qu\'il en reste ainsi.',
+          effects: { pcNext: 1, pressure: 1 } },
+      ],
+    },
+    {
+      id: 'q_lumiere', minTurn: 2, act: 1,
+      text: '« La Lumière juge ceux qui parlent faux. Que voulez-vous vraiment ? »',
+      replies: [
+        { label: '« Que vous voyiez encore un matin, Élie. »', tag: 'empathie',
+          answer: '…Un matin. Il ne m\'en reste que peu, vous le savez.',
+          effects: { ifClue: { id: 's_mort', then: { threat: -1 }, else: {} } } },
+        { label: '« Servir la Lumière, comme vous. »', tag: 'ruse',
+          answer: 'Nul ne sert la Lumière sans y croire. Je vous écoute.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+        { label: '« Que la loi reprenne ses droits dans cette ferme. »', tag: 'autorite',
+          answer: 'La LOI ? L\'Aube ne reconnaît que la Lumière.',
+          effects: { threat: 1 } },
+      ],
+    },
+    {
+      id: 'q_dernier', minTurn: 2, act: 2,
+      text: '« Les enfants dormiront dans la Lumière. Pourquoi les priver de ça ? »',
+      replies: [
+        { label: '« Personne ne les prive de rien. Rouvrez d\'abord le portail. »', tag: 'ruse',
+          answer: 'Vous tournez autour. Comme tous les autres.',
+          effects: { pcNext: 1, pressure: 1 } },
+        { label: '« Ils ont besoin de voir le soleil se lever dehors, pas ici. »', tag: 'empathie',
+          answer: 'Le soleil… Petite a froid. Elle peut sortir. Elle seulement.',
+          effects: { ifClue: { id: 's_enfants', then: { threat: -1, free: 1 }, else: { threat: -1 } } } },
+        { label: '« Parce que ce ne sont pas vos enfants. »', tag: 'autorite',
+          answer: 'TOUS les enfants de l\'Aube sont mes enfants !',
+          effects: { threat: 1 } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Élie Vasseur est sorti au premier matin, les bras ouverts, et s\'est agenouillé dans la neige pour se laisser menotter. Derrière lui, les enfants regardaient sans comprendre. Sabine les a ramenés à l\'intérieur une dernière fois, puis a suivi.',
     liberation: 'Le dernier enfant a franchi le portail au petit jour. Élie est resté dans la grande salle éteinte, assis au centre du cercle de bougies. On l\'a trouvé comme ça : seul, calme, la bouche ouverte comme s\'il parlait encore à l\'Aube.',

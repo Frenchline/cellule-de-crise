@@ -646,6 +646,7 @@ function refreshBriefing() {
     refreshBriefing();
   });
   $('#btn-brief-intro').hidden = !(illusOn() && getIntro(pendingMission));
+  $('#btn-brief-reroll').hidden = !(pendingMission && pendingMission.startsWith('gen:'));
 }
 
 function launchMission() {
@@ -690,6 +691,7 @@ function showDebrief() {
   const scoreInfo = E.computeScore(game, mult);
   const outcome = game.result.outcome;
   const { rankUps } = CAM.recordResult(campaign, game.missionId, outcome, scoreInfo, game.hostages, game.options);
+  CAM.recordDaily(campaign, game.missionId, outcome, scoreInfo, game.hostages);
   if (saveEnabled) { CAM.saveCampaign(campaign); CAM.clearGame(); }
   const rank = CAM.getRank(campaign.xp);
   UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn());
@@ -707,6 +709,12 @@ function showHQ() {
   UI.renderHQ(campaign, MISSION_LIST, {
     openMission: startIntroOrBriefing,
     learn: (skillId) => { CAM.learnSkill(campaign, skillId); if (saveEnabled) CAM.saveCampaign(campaign); showHQ(); },
+    randomMission: () => {
+      const seed = Math.floor(Math.random() * 900000) + 100000;
+      pendingMission = `gen:${seed}`;
+      openBriefing(pendingMission);
+    },
+    shareDaily: shareDailyResult,
   });
   const save = CAM.loadGame();
   const btnR = $('#btn-resume');
@@ -779,6 +787,26 @@ $('#btn-brief-intro').addEventListener('click', () => {
   const intro = getIntro(pendingMission);
   if (intro) showCutscene(intro, null);
 });
+$('#btn-brief-reroll').addEventListener('click', () => {
+  const seed = Math.floor(Math.random() * 900000) + 100000;
+  pendingMission = `gen:${seed}`;
+  refreshBriefing();
+});
+
+// Mission du jour — partage du premier résultat du jour
+function shareDailyResult() {
+  const d = campaign.daily;
+  if (!d) return;
+  const dt = new Date();
+  const jj = String(dt.getDate()).padStart(2, '0');
+  const mm = String(dt.getMonth() + 1).padStart(2, '0');
+  const text = `Négociateur — mission du jour ${jj}/${mm} : note ${d.grade}, ${d.saved}/${d.total} otages sauvés. https://frenchline.github.io/cellule-de-crise/`;
+  if (navigator.share) {
+    navigator.share({ text }).catch(() => {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+}
 
 $('#set-volume').addEventListener('input', e => {
   AU.initAudio();
@@ -849,6 +877,15 @@ if ('serviceWorker' in navigator) {
     const mode = h.slice(5);
     campaign = CAM.defaultCampaign();
     campaign.agentName = 'Doc';
+    // découpe "<missionId>[:p1[:p2]]" en tenant compte des ids « gen:<seed> »
+    const splitId = (rest, nParams) => {
+      const parts = rest.split(':');
+      for (let k = Math.min(nParams, parts.length - 1); k >= 0; k--) {
+        const mid = parts.slice(0, parts.length - k).join(':');
+        if (getMission(mid)) return [mid, ...parts.slice(parts.length - k)];
+      }
+      return [rest];
+    };
     if (mode === 'hq' || mode === 'hq:unlocked') {
       if (mode === 'hq:unlocked') {
         // campagne mémoire pré-remplie : classiques gagnées → avancés débloqués (rien n'est sauvegardé)
@@ -934,7 +971,7 @@ if ('serviceWorker' in navigator) {
       return;
     }
     if (mode.startsWith('game:')) {
-      const parts = mode.slice(5).split(':');
+      const parts = splitId(mode.slice(5), 1);
       pendingMission = parts[0];
       launchMission();
       const steps = parseInt(parts[1] || '0', 10);
@@ -944,6 +981,27 @@ if ('serviceWorker' in navigator) {
           const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
           if (cid) E.playCard(game, cid, null); else E.endPhase(game);
         } else E.endPhase(game);
+      }
+      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
+      return;
+    }
+    if (mode.startsWith('question:')) {
+      // #auto:question:<missionId>[:<qid>] — avance jusqu'à la question puis
+      // la fige pour capture/vérif. Révèle l'indice lié pour le badge ✓.
+      const parts = splitId(mode.slice(9), 1);
+      pendingMission = parts[0];
+      launchMission();
+      const m = getMission(pendingMission);
+      const q = (m.questions || []).find(x => x.id === parts[1]) || (m.questions || [])[0];
+      if (q) {
+        // révèle l'indice de la première réponse ifClue → badge « cohérent »
+        const withClue = q.replies.find(r => r.effects && r.effects.ifClue);
+        if (withClue) {
+          const c = E.getClue(game, withClue.effects.ifClue.id);
+          if (c) c.revealed = true;
+        }
+        game.turn = Math.max(game.turn, q.minTurn || 1);
+        E.maybeQuestion(game);
       }
       logCursor = 0; UI.resetTranscript(); syncGameUI(true);
       return;
@@ -961,7 +1019,7 @@ if ('serviceWorker' in navigator) {
     if (mode.startsWith('tabs:')) {
       // #auto:tabs:<id>:<equipe|dossier>[:intel] — partie en phase d'équipe,
       // onglet ouvert (option : un Renseignement d'abord → plan dévoilé).
-      const parts = mode.slice(5).split(':');
+      const parts = splitId(mode.slice(5), 2);
       pendingMission = parts[0];
       launchMission();
       game.phase = 'team';
@@ -974,7 +1032,7 @@ if ('serviceWorker' in navigator) {
     }
     if (mode.startsWith('layout:')) {
       // mesure le défilement : body ne doit pas défiler, onglets dans l'écran
-      const parts = mode.slice(7).split(':');
+      const parts = splitId(mode.slice(7), 1);
       pendingMission = parts[0];
       launchMission();
       const steps = parseInt(parts[1] || '0', 10);

@@ -8,14 +8,14 @@ import { OPTION_LIST } from './data/options.js';
 import {
   PHASE_LABELS, canPlayCard, cardDicePool, diceModifier, describeEffects,
   canBuy, teamActionsLeft, getDemandDef, getClueDef, pendingDemands,
-  getMissionDef, threatLabelFr, getTaker, roman, getChoice,
+  getMissionDef, threatLabelFr, getTaker, roman, getChoice, replyCoherent,
   cardOdds, failRisk, ensureHostageList, assaultOdds,
 } from './engine.js';
-import { getRank, RANKS, missionUnlocked } from './campaign.js';
+import { getRank, RANKS, missionUnlocked, dailyMissionId, dailySeed } from './campaign.js';
 import * as PIX from './pixel.js';
 import * as PLANS from './pixelplan.js';
 import { getPlan, sceneBase } from './data/plans.js';
-import { MISSION_LIST } from './data/missions/index.js';
+import { MISSION_LIST, getMission } from './data/missions/index.js';
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -669,6 +669,52 @@ export function renderHQ(c, missionList, handlers) {
     box.append(btn);
   });
 
+  // ---------- Opérations spéciales (missions générées) ----------
+  // Visible dès que le tutoriel est gagné.
+  const opsTitle = $('#hq-ops-title');
+  const ops = $('#hq-ops');
+  ops.innerHTML = '';
+  const tutoDone = c.missions.tutoriel && c.missions.tutoriel.wins > 0;
+  const sickLeaveOps = c.stress >= 5;
+  if (tutoDone && handlers.openMission) {
+    opsTitle.classList.remove('hidden');
+
+    // Mission du jour — même seed (date) pour tout le monde
+    const dailyId = dailyMissionId();
+    const daily = getMission(dailyId);
+    const db = el('button', `mission-card ops${sickLeaveOps ? ' locked' : ''}`);
+    db.append(el('span', 'm-num', '📅'));
+    const dbody = el('span', 'm-body');
+    dbody.append(el('div', 'm-title', 'MISSION DU JOUR'));
+    dbody.append(el('div', 'm-sub', `${daily.title} · ${daily.subtitle}`));
+    const todayDone = c.daily && c.daily.date === dailySeed();
+    dbody.append(el('div', 'm-meta',
+      sickLeaveOps ? 'Arrêt maladie — prenez du repos'
+      : todayDone ? `Déjà jouée aujourd'hui : note ${c.daily.grade}` : 'Une mission unique, la même pour tous, renouvelée demain.'));
+    db.append(dbody);
+    if (!sickLeaveOps) db.addEventListener('click', () => handlers.openMission(dailyId));
+    ops.append(db);
+    if (todayDone && handlers.shareDaily) {
+      const share = el('button', 'btn btn-small ops-share', '📤 Partager');
+      share.addEventListener('click', (e) => { e.stopPropagation(); handlers.shareDaily(); });
+      ops.append(share);
+    }
+
+    // Mission aléatoire
+    const rb = el('button', `mission-card ops${sickLeaveOps ? ' locked' : ''}`);
+    rb.append(el('span', 'm-num', '🎲'));
+    const rbody = el('span', 'm-body');
+    rbody.append(el('div', 'm-title', 'MISSION ALÉATOIRE'));
+    rbody.append(el('div', 'm-sub', 'Une alerte quelque part en France.'));
+    rbody.append(el('div', 'm-meta',
+      sickLeaveOps ? 'Arrêt maladie — prenez du repos' : 'Générée à chaque fois. XP et stress comme en mission classique.'));
+    rb.append(rbody);
+    if (!sickLeaveOps) rb.addEventListener('click', () => handlers.randomMission());
+    ops.append(rb);
+  } else {
+    opsTitle.classList.add('hidden');
+  }
+
   const sk = $('#hq-skills');
   sk.innerHTML = '';
   $('#hq-skillpoints').textContent = c.skillPoints ? `(${c.skillPoints} point${c.skillPoints > 1 ? 's' : ''} à dépenser)` : '';
@@ -869,17 +915,44 @@ export function renderChoiceModal(state, onChoose) {
   const ch = getChoice(state);
   if (!ch) { modal.classList.add('hidden'); return; }
   modal.innerHTML = '';
-  const box = el('div', 'ch-card');
-  box.append(el('div', 'ch-title', 'DÉCISION'));
-  box.append(el('div', 'ch-prompt', ch.prompt));
-  const opts = el('div', 'ch-opts');
-  ch.options.forEach((o, i) => {
-    const b = el('button', 'ch-opt');
-    b.append(el('div', 'co-label', o.label), el('div', 'co-desc', o.desc || ''));
-    b.addEventListener('click', () => onChoose(i));
-    opts.append(b);
-  });
-  box.append(opts);
+  const box = el('div', `ch-card${ch.question ? ' ch-dialog' : ''}`);
+  if (ch.question) {
+    // dialogue : le preneur parle, trois réponses proposées
+    const taker = getTaker(state);
+    const head = el('div', 'ch-speaker');
+    const cv = PIX.spriteCanvas(PIX.portraitSprite(taker.portrait, 'parle'), 2);
+    cv.className = 'ch-portrait';
+    head.append(cv);
+    const who = el('div');
+    who.append(el('div', 'ch-title', 'IL DEMANDE'));
+    who.append(el('div', 'ch-name', taker.name));
+    head.append(who);
+    box.append(head);
+    box.append(el('div', 'ch-bubble', ch.prompt));
+    const opts = el('div', 'ch-opts');
+    ch.options.forEach((o, i) => {
+      const b = el('button', 'ch-opt ch-reply');
+      b.append(el('div', 'co-label', o.label));
+      const row = el('div', 'co-row');
+      row.append(el('span', `co-tag tag-${o.tag || 'default'}`, TAGS[o.tag] || 'Neutre'));
+      if (replyCoherent(state, o)) row.append(el('span', 'co-badge', '✓ cohérent avec son profil'));
+      b.append(row);
+      b.addEventListener('click', () => onChoose(i));
+      opts.append(b);
+    });
+    box.append(opts);
+  } else {
+    box.append(el('div', 'ch-title', 'DÉCISION'));
+    box.append(el('div', 'ch-prompt', ch.prompt));
+    const opts = el('div', 'ch-opts');
+    ch.options.forEach((o, i) => {
+      const b = el('button', 'ch-opt');
+      b.append(el('div', 'co-label', o.label), el('div', 'co-desc', o.desc || ''));
+      b.addEventListener('click', () => onChoose(i));
+      opts.append(b);
+    });
+    box.append(opts);
+  }
   modal.append(box);
   modal.classList.remove('hidden');
 }
@@ -971,6 +1044,25 @@ export const RULES = [
       'L\'onglet Dossier contient le profil du preneur et des indices psychologiques cachés, révélés par Renseignement ou certaines cartes.',
       'Chaque indice révélé peut donner un <b>bonus ou malus de dés</b> selon le type de carte (empathie, autorité, pression, ruse) — certains débloquent des cartes spéciales (« Appel d\'un proche » exige un indice « proche »).',
       'Révéler tout le dossier rapporte +50 pts.',
+    ],
+  },
+  {
+    id: 'sec-questions', title: 'Ses questions',
+    body: [
+      'Parfois, en début de tour, <b>le preneur pose une question</b>. La partie se fige : choisissez votre réponse parmi les trois proposées.',
+      'Chaque réponse porte un <b>ton</b> (Empathie, Autorité, Pression, Ruse). Le ton compte autant que les mots — relisez son profil.',
+      'Le badge <b>✓ cohérent avec son profil</b> apparaît quand une réponse colle à un indice révélé : c\'est souvent la meilleure, mais pas toujours la plus sûre.',
+      'Mentir ou promettre rapporte un avantage immédiat… qui peut se retourner. Une réponse n\'est jamais neutre : il retient tout.',
+      'Le chrono est suspendu pendant la question.',
+    ],
+  },
+  {
+    id: 'sec-ops', title: 'Opérations spéciales',
+    body: [
+      'Débloquées une fois le tutoriel remporté, les opérations spéciales proposent des <b>missions générées</b> : nouveau preneur, nouveaux lieux, demandes et indices inédits — mêmes règles qu\'une mission classique.',
+      '<b>MISSION DU JOUR</b> : la même pour tout le monde, renouvelée chaque jour. Le premier résultat du jour est enregistré (note, otages sauvés) et partageable — les replays ne l\'écrasent pas.',
+      '<b>MISSION ALÉATOIRE</b> : un tirage à chaque fois ; « 🎲 Autre mission » au briefing en tire une autre.',
+      'XP et stress s\'appliquent comme en mission classique ; les scores des missions générées ne gonflent pas vos records (seule la mission du jour est gardée).',
     ],
   },
   {

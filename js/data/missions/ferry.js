@@ -335,6 +335,54 @@ export const MISSION_FERRY = {
   market: ['verite_brutale', 'famille', 'dossier_psy', 'souffrance', 'echange', 'mediateur',
            'nourriture', 'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'passerelle', 'humour'],
 
+  questions: [
+    {
+      id: 'q_manuels', minTurn: 2, act: 0,
+      text: '« Vous allez me parler d\'écoute active ? J\'ai lu les mêmes manuels que vous. »',
+      replies: [
+        { label: '« Alors vous savez aussi comment ça finit sans issue. »', tag: 'autorite',
+          answer: 'Le bruit, pas le sang. C\'est ce qu\'on veut ici.',
+          effects: { ifClue: { id: 'f_bruit', then: { threat: -1 }, else: { threat: 1 } } } },
+        { label: '« Pas de manuels ici. Je débute. »', tag: 'ruse',
+          answer: 'Vous débutez ? Alors écoutez bien, débutant.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+        { label: '« Alors vous savez aussi que le temps joue pour moi. »', tag: 'pression',
+          answer: 'Le temps joue pour personne sur un ferry piégé.',
+          effects: { threat: 1 } },
+      ],
+    },
+    {
+      id: 'q_pertes', minTurn: 2, act: 1,
+      text: '« Vingt personnes à bord. Vous êtes prêt à en perdre combien ? »',
+      replies: [
+        { label: '« Le gouvernement n\'acceptera jamais de morts. Vous avez gagné. »', tag: 'ruse',
+          answer: 'On verra ce que vaut votre gouvernement.',
+          effects: { pcNext: 1, pressure: 1 } },
+        { label: '« Zéro. Onze enfants comptent sur votre calme. »', tag: 'empathie',
+          answer: 'Les enfants… personne ne touche aux enfants.',
+          effects: { ifClue: { id: 'f_familles', then: { threat: -1 }, else: {} } } },
+        { label: '« Autant qu\'il faudra pour vous arrêter. »', tag: 'autorite',
+          answer: 'Dans ce cas préparez les sacs. Beaucoup.',
+          effects: { threat: 1 } },
+      ],
+    },
+    {
+      id: 'q_charges', minTurn: 2, act: 2,
+      text: '« Mira dit que mes charges feront peur. Et vous, vous y croyez ? »',
+      replies: [
+        { label: '« J\'y crois assez pour ne pas vouloir que vous appuyiez, Ansel. Sortez de là. »', tag: 'empathie',
+          answer: 'Sortir… vingt ans de quai, et je finis ici. Vous avez peut-être raison.',
+          effects: { ifClue: { id: 'f_epuise', then: { threat: -1, pc: 1 }, else: {} } } },
+        { label: '« On a vérifié. Elles sont désamorcées depuis deux heures. »', tag: 'pression',
+          answer: 'Désamorcées ?! Vous n\'y êtes pas allés de si près.',
+          effects: { threat: 1 } },
+        { label: '« Nos plongeurs sont sous la coque en ce moment. »', tag: 'ruse',
+          answer: 'Sous la coque. Amusant. Vous bluffez, mais amusant.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Ansel Roux a désamorcé les charges à 04h17 et a descendu la passerelle lui-même. Les passagers sont sortis dans le silence du port. Mira a lu son communiqué aux caméras avant de tendre les poignets. Personne n\'est mort. C\'était le seul mot qui comptait.',
     liberation: 'Le dernier passager a touché le quai à 03h52. À bord, les quatre membres de la cellule ont posé les armes sur le pont et attendu. L\'Étoile du Levant n\'est jamais repartie — elle rouille toujours à la Joliette.',

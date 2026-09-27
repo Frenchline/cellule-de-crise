@@ -155,6 +155,54 @@ export const MISSION_HOPITAL = {
   market: ['famille', 'appel_proche', 'souffrance', 'dossier_psy', 'mediateur', 'promesse',
            'nourriture', 'verite_brutale', 'echange', 'mentir_delais', 'silence_tactique', 'humour', 'bluff_assaut'],
 
+  questions: [
+    {
+      id: 'q_nuits', minTurn: 2,
+      text: '« Vous êtes déjà resté onze nuits sans dormir, vous ? »',
+      replies: [
+        { label: '« Tout le temps, dans ce métier. »', tag: 'ruse',
+          answer: '…Oui. On voit des choses, à force.',
+          effects: { pcNext: 1, pressure: 1 } },
+        { label: '« C\'est une question ? Répondez plutôt aux miennes. »', tag: 'pression',
+          answer: 'Vos questions. Toujours vos questions.',
+          effects: { threat: 1 } },
+        { label: '« Non. Et vous, vous les portez depuis onze nuits. »', tag: 'empathie',
+          answer: 'Onze. Je compte plus les cafés.',
+          effects: { ifClue: { id: 'h_insomnie', then: { threat: -1 }, else: {} } } },
+      ],
+    },
+    {
+      id: 'q_machines', minTurn: 4,
+      text: '« Si les machines s\'arrêtent, c\'est vous les responsables. »',
+      replies: [
+        { label: '« C\'est pour ça que les soignants comptent ici, pas moi. »', tag: 'autorite',
+          answer: 'Les soignants… oui. Eux ils comptent, au moins.',
+          effects: { ifClue: { id: 'h_patients', then: { threat: -1 }, else: {} } } },
+        { label: '« Hélène ne vous voudrait pas ça. »', tag: 'empathie',
+          answer: 'Ne prononcez pas son nom. PAS SON NOM.',
+          effects: { ifClue: { id: 'h_helene', then: { threat: -1, pc: 1 }, else: { threat: 1 } } } },
+        { label: '« Les générateurs tiendront. On a des techniciens prêts. »', tag: 'ruse',
+          answer: 'J\'espère pour vous. Pour tout le monde.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
+    {
+      id: 'q_onze', minTurn: 6,
+      text: '« Onze jours qu\'elle est partie. Vous avez une idée de ce que ça fait ? »',
+      replies: [
+        { label: '« Non. Mais deux patients en bas dépendent encore de vous. »', tag: 'autorite',
+          answer: 'Les machines dépendent de moi. Pas les patients.',
+          effects: { ifClue: { id: 'h_patients', then: { threat: -1 }, else: { threat: 1 } } } },
+        { label: '« Vingt-six ans. Personne ne peut imaginer. Parlez-moi d\'elle. »', tag: 'empathie',
+          answer: 'Elle… elle jouait du hautbois. Vous saviez ?',
+          effects: { ifClue: { id: 'h_helene', then: { threat: -1, pc: 1 }, else: {} } } },
+        { label: '« Oui. J\'ai perdu ma femme aussi. »', tag: 'ruse',
+          answer: 'Alors vous savez qu\'on ne s\'en remet pas.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Marc Delaunay a posé l\'arme sur le lit d\'Hélène. Il a tenu la photo contre sa poitrine tout le long du couloir. Le chef de service a fait sa déclaration trois jours plus tard. Le rapport du procureur dira « dénouement sans effusion de sang ». Vous savez ce qu\'il en a coûté.',
     liberation: 'Le dernier soignant a franchi le sas à 13h46. Les respirateurs n\'ont jamais cessé. Marc, seul avec le lit 412 et la photo d\'Hélène, a attendu que les hommes viennent. Il n\'a plus rien dit. Il n\'avait plus rien à dire.',

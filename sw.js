@@ -1,5 +1,5 @@
 // Service Worker — cache hors-ligne complet
-const CACHE = 'negociateur-v8';
+const CACHE = 'negociateur-v9';
 const FILES = [
   './',
   './index.html',
@@ -15,6 +15,7 @@ const FILES = [
   './js/pixelcut.js',
   './js/pixelplan.js',
   './js/data/plans.js',
+  './js/data/generator.js',
   './js/data/cutscenes.js',
   './js/data/cards.js',
   './js/data/terror.js',

@@ -8,6 +8,7 @@ import { MISSION_HOPITAL } from './hopital.js';
 import { MISSION_SECTE } from './secte.js';
 import { MISSION_PRISON } from './prison.js';
 import { MISSION_FERRY } from './ferry.js';
+import { generateMission } from '../generator.js';
 
 export const MISSIONS = {
   tutoriel: MISSION_TUTORIEL,
@@ -26,6 +27,20 @@ export const MISSION_LIST = [
 export const CLASSIC_IDS = ['braquage', 'hopital'];
 export const ADVANCED_IDS = ['secte', 'prison', 'ferry'];
 
+// Missions générées « Opérations spéciales » : id « gen:<seed> ».
+// Régénérées de façon déterministe à la demande (sauvegardes, reprendre).
+const generatedCache = new Map();
+
 export function getMission(id) {
-  return MISSIONS[id] || null;
+  if (MISSIONS[id]) return MISSIONS[id];
+  if (typeof id === 'string' && id.startsWith('gen:')) {
+    const seed = parseInt(id.slice(4), 10);
+    if (!Number.isFinite(seed)) return null;
+    if (!generatedCache.has(seed)) {
+      generatedCache.set(seed, generateMission(seed));
+      if (generatedCache.size > 20) generatedCache.delete(generatedCache.keys().next().value);
+    }
+    return generatedCache.get(seed);
+  }
+  return null;
 }

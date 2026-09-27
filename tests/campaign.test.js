@@ -104,3 +104,27 @@ test('déblocage : scénarios avancés après les 2 classiques gagnées', () => 
   assert.equal(CAM.missionUnlocked(c, 'prison', MISSION_LIST), true);
   assert.equal(CAM.missionUnlocked(c, 'ferry', MISSION_LIST), true);
 });
+
+test('missions générées : pas d\'entrée dans campaign.missions, XP/stress appliqués', () => {
+  const c = CAM.defaultCampaign();
+  const scoreInfo = { score: 400, grade: 'B', xp: 40 };
+  CAM.recordResult(c, 'gen:12345', 'surrender', scoreInfo, { killed: 0, freed: 4, remaining: 0, total: 4 });
+  assert.equal(c.missions['gen:12345'], undefined);
+  assert.equal(c.xp, 40);
+  const daily = CAM.dailyMissionId();
+  CAM.recordResult(c, daily, 'defeat', { score: 10, grade: 'D', xp: 1 }, { killed: 2, freed: 1, remaining: 0, total: 4 });
+  assert.equal(c.missions[daily], undefined);
+});
+
+test('mission du jour : premier résultat seulement', () => {
+  const c = CAM.defaultCampaign();
+  const daily = CAM.dailyMissionId();
+  const host = { killed: 1, freed: 3, remaining: 0, total: 4 };
+  assert.ok(CAM.recordDaily(c, daily, 'liberation', { score: 500, grade: 'A' }, host));
+  assert.deepEqual(c.daily, { date: CAM.dailySeed(), grade: 'A', score: 500, saved: 3, total: 4 });
+  // un replay ne remplace pas le premier résultat
+  assert.equal(CAM.recordDaily(c, daily, 'defeat', { score: 0, grade: 'D' }, host), false);
+  assert.equal(c.daily.grade, 'A');
+  // une autre mission générée ne touche pas le record du jour
+  assert.equal(CAM.recordDaily(c, 'gen:999', 'liberation', { score: 700, grade: 'S' }, host), false);
+});

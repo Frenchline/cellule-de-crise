@@ -999,11 +999,11 @@ function postTerror(state, justTransitioned) {
     if (!last) {
       transitionAct(state, state.act + 1);
       if (state.pendingChoice || state.result) return;
-      return startTurn(state);
+      return startTurn(state, true);
     }
     return resolveHeureH(state);
   }
-  startTurn(state);
+  startTurn(state, justTransitioned);
 }
 
 function getTerrorDef(state, id) {
@@ -1013,7 +1013,7 @@ function getTerrorDef(state, id) {
   return TERROR_GENERIC[id] || null;
 }
 
-function startTurn(state) {
+function startTurn(state, freshAct = false) {
   state.turn++;
   state.phase = 'conversation';
   state.usedThisTurn = [];
@@ -1059,6 +1059,58 @@ function startTurn(state) {
   if (act && act.eachTurn && !state.result) {
     resolveEffect(state, act.eachTurn, { source: 'actTurn' });
   }
+  // question du preneur : une fois chacune, ≥ 2 tours d'écart,
+  // jamais le tour qui suit une transition d'acte ni après une fin
+  if (!freshAct) maybeQuestion(state);
+}
+
+// ---------------- Questions du preneur ----------------
+// Posées en début de tour (fin de startTurn), réponses via le mécanisme
+// de choix. Déterministe, dans l'ordre des données, sans RNG.
+
+function questionCoherent(state, reply) {
+  const c = reply && reply.effects && reply.effects.ifClue;
+  if (!c || !c.then) return false;
+  const clue = getClue(state, c.id);
+  if (!clue || !clue.revealed) return false;
+  const t = c.then;
+  return (t.threat || 0) < 0 || (t.pc || 0) > 0 || (t.pcNext || 0) > 0 || (t.free || 0) > 0;
+}
+
+// Affiché dans la modale de choix : badge « cohérent avec son profil ».
+export function replyCoherent(state, reply) { return questionCoherent(state, reply); }
+
+// Réponses à la question : applique le même filtrage conditionnel pour la
+// modale de résolution (la branche affichée doit être celle jouée).
+function questionEffects(state, reply) {
+  const eff = reply.effects || {};
+  if (!eff.ifClue) return eff;
+  const out = { ...eff };
+  delete out.ifClue;
+  const c = eff.ifClue;
+  const clue = getClue(state, c.id);
+  const branch = (clue && clue.revealed) ? c.then : c.else;
+  if (branch) Object.assign(out, branch);
+  return out;
+}
+
+export function maybeQuestion(state) {
+  if (state.result || state.pendingChoice || state.phase !== 'conversation') return;
+  const mission = getMissionDef(state);
+  const qs = mission.questions || [];
+  if (!qs.length) return;
+  if (!state.questionsAsked) state.questionsAsked = [];
+  if (state.lastQuestionTurn === undefined) state.lastQuestionTurn = null;
+  if (state.lastQuestionTurn !== null && state.turn - state.lastQuestionTurn < 2) return;
+  const q = qs.find(q => !state.questionsAsked.includes(q.id)
+    && state.turn >= (q.minTurn || 1)
+    && (q.act === undefined || q.act === state.act)
+    && (q.flag === undefined || state.flags[q.flag]));
+  if (!q) return;
+  state.questionsAsked.push(q.id);
+  state.lastQuestionTurn = state.turn;
+  state.phase = 'choice';
+  state.pendingChoice = { questionId: q.id };
 }
 
 // ---------------- Actes / Choix / Compteurs ----------------
@@ -1147,6 +1199,12 @@ function concedeDemandById(state, demandId) {
 export function getChoice(state) {
   if (!state.pendingChoice) return null;
   const mission = getMissionDef(state);
+  if (state.pendingChoice.questionId) {
+    const q = (mission.questions || []).find(q => q.id === state.pendingChoice.questionId);
+    if (!q) return null;
+    // adapté au format des choix : prompt + options (label)
+    return { question: q, prompt: q.text, speaker: q.speaker, options: q.replies };
+  }
   return (mission.choices || {})[state.pendingChoice.choiceId] || null;
 }
 
@@ -1163,6 +1221,20 @@ export function chooseOption(state, idx) {
   const pc = state.pendingChoice;
   if (!pc) return { ok: false, reason: 'Aucun choix en cours' };
   const mission = getMissionDef(state);
+  if (pc.questionId) {
+    const q = (mission.questions || []).find(q => q.id === pc.questionId);
+    const r = q && q.replies[idx];
+    if (!r) return { ok: false, reason: 'Réponse invalide' };
+    log(state, 'player', r.line || r.label);
+    state.pendingChoice = null;
+    if (r.answer) log(state, 'taker', r.answer);
+    const eff = questionEffects(state, r);
+    const summary = describeEffects(eff);
+    if (summary !== '—') log(state, 'sys', `Effet : ${summary}`);
+    if (eff && Object.keys(eff).length) resolveEffect(state, eff, { source: 'choice', cause: `Question : ${q.id}` });
+    if (!state.result && !state.pendingChoice) state.phase = 'conversation';
+    return { ok: true };
+  }
   const ch = mission.choices[pc.choiceId];
   const opt = ch && ch.options[idx];
   if (!opt) return { ok: false, reason: 'Option invalide' };

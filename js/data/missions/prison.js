@@ -289,6 +289,54 @@ export const MISSION_PRISON = {
   market: ['verite_brutale', 'dossier_psy', 'souffrance', 'mediateur', 'echange', 'nourriture',
            'bluff_assaut', 'mentir_delais', 'silence_tactique', 'promesse', 'appel_avocat', 'solidarite_detenus', 'humour'],
 
+  questions: [
+    {
+      id: 'q_maison', minTurn: 2, act: 0,
+      text: '« Vous êtes de quelle maison, vous ? »',
+      replies: [
+        { label: '« De celle où on rend les clés, pas où on les garde. »', tag: 'autorite',
+          answer: 'Hé. Vous parlez comme un type de l\'intérieur. J\'aime ça.',
+          effects: { ifClue: { id: 'p_code', then: { threat: -1 }, else: {} } } },
+        { label: '« De Saint-Aubin, comme vous. »', tag: 'ruse',
+          answer: 'Saint-Aubin ? Peut-être. On verra si c\'est vrai.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+        { label: '« D\'aucune. C\'est pour ça que vous me parlez. »', tag: 'empathie',
+          answer: 'Un homme de dehors. Faudra pas me décevoir.',
+          effects: { threat: -1 } },
+      ],
+    },
+    {
+      id: 'q_ligne', minTurn: 2, act: 1,
+      text: '« Le vieux dort. C\'est moi qui parle, ou vous coupez la ligne ? »',
+      replies: [
+        { label: '« On a réglé ça : il ne vous dérangera plus. »', tag: 'ruse',
+          answer: 'Réglé comment ? Si vous mentez, je le saurai.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+        { label: '« Tant que l\'infirmière est en sécurité, on parle. »', tag: 'empathie',
+          answer: 'L\'infirmière… elle va bien. Personne ne la touche.',
+          effects: { ifClue: { id: 'p_infirmiere', then: { threat: -1 }, else: {} } } },
+        { label: '« Vous ne décidez plus de rien, Sorel. »', tag: 'pression',
+          answer: 'Vous allez voir ce que je décide !',
+          effects: { ifClue: { id: 'p_sorel_drogue', then: { threat: 2 }, else: { threat: 1 } } } },
+      ],
+    },
+    {
+      id: 'q_transfert', minTurn: 2, act: 2, flag: 'keraudren_allie',
+      text: '« Le directeur voulait me muter en centrale. Dites-lui que je reste. »',
+      replies: [
+        { label: '« Le refus est déjà signé. Parlez-moi d\'abord des otages. »', tag: 'pression',
+          answer: 'Signé ? …Alors faites-le déchirer.',
+          effects: { ifClue: { id: 'p_greffe', then: { threat: -1 }, else: { threat: 1 } } } },
+        { label: '« Vous resterez où vos gens seront en sécurité. Sortez d\'abord. »', tag: 'empathie',
+          answer: 'Ma sécurité… seize ans que j\'entends plus ce mot.',
+          effects: { threat: -1 } },
+        { label: '« C\'est acté. Je m\'en porte garant. »', tag: 'ruse',
+          answer: 'Un garant. J\'en ai entendu d\'autres.',
+          effects: { pcNext: 1, mark: 'promesse' } },
+      ],
+    },
+  ],
+
   epilogues: {
     surrender: 'Les portes du quartier B se sont ouvertes à 03h12. Les otages sont sortis un par un, le visage noir de suie. Keraudren a remis ses clés au directeur comme à un notaire. Sorel dormait déjà à l\'isolement.',
     liberation: 'Le dernier surveillant a franchi la barricade à 02h47. Le quartier, épuisé, s\'est laissé évacuer. Il restera un mois pour reconstruire l\'aile incendiée — et des années pour oublier cette nuit.',

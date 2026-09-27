@@ -75,6 +75,31 @@ export function missionUnlocked(c, missionId, missionList) {
   return true;
 }
 
+// Missions générées (« gen:<seed> ») : pas d'entrée dans c.missions
+// (localStorage borné) — seul campaign.daily persiste, et la mission du jour.
+export function isGeneratedMission(id) { return typeof id === 'string' && id.startsWith('gen:'); }
+
+// Seed de la mission du jour : date locale AAAAMMJJ, identique pour tous.
+export function dailySeed(date = new Date()) {
+  return date.getFullYear() * 10000 + (date.getMonth() + 1) * 100 + date.getDate();
+}
+export function dailyMissionId(date = new Date()) { return `gen:${dailySeed(date)}`; }
+
+// Premier résultat du jour seulement — les replays n'écrasent pas.
+export function recordDaily(c, missionId, outcome, scoreInfo, hostages) {
+  const today = dailySeed();
+  if (missionId !== `gen:${today}`) return false;
+  if (c.daily && c.daily.date === today) return false;
+  c.daily = {
+    date: today,
+    grade: scoreInfo.grade,
+    score: scoreInfo.score,
+    saved: hostages.total - hostages.killed,
+    total: hostages.total,
+  };
+  return true;
+}
+
 export function recordResult(c, missionId, outcome, scoreInfo, hostages, options = {}) {
   const m = c.missions[missionId] || { plays: 0, wins: 0, bestScore: 0, bestGrade: 'D', finished: false };
   m.plays++;
@@ -82,7 +107,7 @@ export function recordResult(c, missionId, outcome, scoreInfo, hostages, options
   const win = outcome !== 'defeat';
   if (win) m.wins++;
   if (scoreInfo.score > m.bestScore) { m.bestScore = scoreInfo.score; m.bestGrade = scoreInfo.grade; }
-  c.missions[missionId] = m;
+  if (!isGeneratedMission(missionId)) c.missions[missionId] = m;
 
   // XP + rangs
   const before = getRank(c.xp).index;
