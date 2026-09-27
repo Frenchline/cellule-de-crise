@@ -12,6 +12,7 @@ import { getIntro } from './data/cutscenes.js';
 import { repEffective } from './reputation.js';
 import { storyContexts } from './data/story.js';
 import { optionsMultiplier } from './data/options.js';
+import { VERSION } from './version.js';
 import { initCutscene, cutOpen, showCutscene, maybeCutscene, TYPEWRITER_DELAY } from './cutscene.js';
 
 const $ = UI.$, $$ = UI.$$;
@@ -831,6 +832,7 @@ const debugApi = {
 
 (async function init() {
   UI.updateGyro(3);
+  const hv = $('#home-ver'); if (hv) hv.textContent = VERSION;
   // Harnais de test/capture : ?debug#auto:<mode> (cf. js/debug.js).
   // saveEnabled = false AVANT tout mode auto : aucune écriture localStorage.
   const h = location.hash.slice(1);

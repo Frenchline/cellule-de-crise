@@ -1,5 +1,6 @@
 // Service Worker — cache hors-ligne complet
-const CACHE = 'negociateur-v13';
+// version : garder en phase avec js/version.js
+const CACHE = 'negociateur-v14';
 const FILES = [
   './',
   './index.html',
@@ -31,6 +32,7 @@ const FILES = [
   './js/data/missions/secte.js',
   './js/data/missions/prison.js',
   './js/data/missions/ferry.js',
+  './js/version.js',
   './assets/icon.svg',
   './assets/icon-maskable.svg',
   './assets/accueil.jpg',
