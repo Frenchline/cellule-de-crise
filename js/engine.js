@@ -9,7 +9,6 @@ import { TERROR_GENERIC, TERROR_COMPLICE } from './data/terror.js';
 import { getMission } from './data/missions/index.js';
 import { SKILLS } from './data/skills.js';
 import { adviceFor } from './advice.js';
-import { getPlan } from './data/plans.js';
 
 export const PHASES = ['conversation', 'market', 'team'];
 export const PHASE_LABELS = {
@@ -83,8 +82,6 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
     threat: mission.startThreat,
     hostages: { total: mission.hostages, remaining: mission.hostages, freed: 0, killed: 0 },
     hostageList: buildHostageList(mission),
-    planKnown: false,
-    sniperPost: null,
     pc: 0,
     hand: Object.keys(BASE_CARDS),
     usedThisTurn: [],
@@ -837,7 +834,7 @@ export function buyCard(state, slotIndex) {
 // ---------------- Actions d'équipe ----------------
 export const TEAM_ACTIONS = [
   { id: 'intel', name: 'Renseignement', desc: 'Révèle un indice caché. Pression +1.' },
-  { id: 'sniper', name: 'Positionner le tireur', desc: 'Préparation +1 ou +2 selon le poste (max 3). Repéré si la menace atteint son seuil : menace +1.' },
+  { id: 'sniper', name: 'Positionner le tireur', desc: 'Préparation +1 (max 3). Si menace ≥ 5, il vous repère : menace +1.' },
   { id: 'supply', name: 'Ravitaillement', desc: 'Nourriture, eau, couvertures. Menace −1, pression +1.' },
   { id: 'concede', name: 'Concéder une demande', desc: 'Satisfaire une demande en attente (choix).', needsTarget: true },
   { id: 'assault', name: 'Donner l\'assaut', desc: 'Fin de mission : résolution tactique selon la préparation.', danger: true },
@@ -860,12 +857,6 @@ export function doTeamAction(state, actionId, targetId = null) {
     const d = getDemand(state, targetId);
     if (!d || d.status !== 'pending') return { ok: false, reason: 'Demande invalide' };
   }
-  if (actionId === 'assault' && targetId) {
-    const e = getPlan(state).entries.find(x => x.id === targetId);
-    if (e && e.needsPlan && !state.planKnown) {
-      return { ok: false, reason: `Entrée « ${e.name} » : plan des lieux requis (Renseignement)` };
-    }
-  }
   const mission = getMissionDef(state);
   const extra = (mission.extraTeamActions || []).find(a => a.id === actionId);
   if (!extra && !TEAM_ACTIONS.some(a => a.id === actionId)) return { ok: false, reason: 'Action inconnue' };
@@ -886,19 +877,12 @@ export function doTeamAction(state, actionId, targetId = null) {
       changePressure(state, 1);
       const n = revealClues(state, 1);
       log(state, 'radio', n ? 'Renseignement : un élément du dossier prend sens.' : 'Renseignement : dossier déjà complet.');
-      if (!state.planKnown) {
-        state.planKnown = true;
-        log(state, 'radio', 'Renseignement : plan des lieux et position des otages établis.');
-      }
       break;
     }
     case 'sniper': {
-      const plan = getPlan(state);
-      const post = plan.posts.find(p => p.id === targetId) || plan.posts[0];
-      state.prep = Math.min(3, state.prep + post.prep);
-      state.sniperPost = post.id;
-      log(state, 'radio', `Tireur en position (${post.name}). Préparation : ${state.prep}/3.`);
-      if (state.threat >= post.detectAt) {
+      state.prep = Math.min(3, state.prep + 1);
+      log(state, 'radio', `Tireur en position. Préparation : ${state.prep}/3.`);
+      if (state.threat >= 5) {
         log(state, 'radio', '⚠ Il a repéré le laser. Il sait.');
         changeThreat(state, 1);
       }
@@ -915,7 +899,7 @@ export function doTeamAction(state, actionId, targetId = null) {
       break;
     }
     case 'assault': {
-      return resolveAssault(state, 'volontaire', targetId);
+      return resolveAssault(state, 'volontaire');
     }
     default:
       return { ok: false, reason: 'Action inconnue' };
@@ -1315,22 +1299,11 @@ export function assaultRisk(state) {
   return risk;
 }
 
-export function assaultOdds(state, entryId = null) {
-  const plan = getPlan(state);
-  const entry = plan.entries.find(e => e.id === entryId) || plan.entries[0];
-  const risk = Math.max(1, assaultRisk(state) + (entry.riskMod || 0));
-  const per = risk / 6;
-  return { entry, risk, perHostageDeath: per, expectedDeaths: per * state.hostages.remaining };
-}
-
-export function resolveAssault(state, kind = 'volontaire', entryId = null) {
+export function resolveAssault(state, kind = 'volontaire') {
   state.flags.assaultKind = kind;
-  const { entry, risk } = assaultOdds(state, entryId);
-  if (entry.needsPlan && !state.planKnown) {
-    return { ok: false, reason: `Entrée « ${entry.name} » : plan des lieux requis (Renseignement)` };
-  }
+  const risk = assaultRisk(state);
   const h = state.hostages.remaining;
-  log(state, 'radio', `◆ ASSAUT — entrée « ${entry.name} » — risque ${risk}/6 par otage (préparation ${state.prep}).`);
+  log(state, 'radio', `◆ ASSAUT — risque ${risk}/6 par otage (préparation ${state.prep}).`);
   const dice = rollDice(state, h);
   let killed = 0;
   for (const d of dice) if (d <= risk) killed++;
@@ -1342,10 +1315,10 @@ export function resolveAssault(state, kind = 'volontaire', entryId = null) {
   if (state.hostages.freed === 0 && state.hostages.remaining <= 0) {
     return endGame(state, 'defeat');
   }
-  // issue sombre si préparation 0 (l'effraction prévient le preneur : 1–2)
+  // issue sombre si préparation 0
   if (state.prep === 0) {
     const d = rollDice(state, 1)[0];
-    if ((entry.escapeOn || [1]).includes(d)) {
+    if (d === 1) {
       state.flags.escape = true;
       return endGame(state, 'escape');
     }

@@ -830,21 +830,7 @@ body[data-tt="7"] #hand, body[data-tt="7"] #game-tabs {
   .cut-next { animation: none; }
 }
 
-/* ---- plan tactique + otages nommés ---- */
-.plan-canvas {
-  display: block; width: 100%; image-rendering: pixelated;
-  border: 1px solid #2a3342; border-radius: 6px; background: #070b12;
-}
-.plan-cap { font-family: var(--mono); font-size: 10px; color: var(--dim); margin: 4px 0 8px; }
-.plan-choices { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
-.plan-choice {
-  font-family: var(--mono); font-size: 11px; text-align: left; line-height: 1.35;
-  color: var(--ink); background: var(--panel2);
-  border: 1px solid #2a3342; border-radius: 5px; padding: 6px 8px; cursor: pointer;
-}
-.plan-choice b { color: var(--amber); font-weight: 600; }
-.plan-choice:hover:not(:disabled) { border-color: var(--amber-dim); }
-.plan-choice:disabled { opacity: .45; cursor: default; }
+/* ---- otages nommés ---- */
 .hud-otages { cursor: pointer; }
 .host-list { margin-top: 4px; }
 .host-row {

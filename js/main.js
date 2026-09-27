@@ -7,12 +7,10 @@ import * as UI from './ui.js';
 import * as CAM from './campaign.js';
 import * as AU from './audio.js';
 import * as PIX from './pixel.js';
-import * as CUT from './pixelcut.js';
-import * as PLANP from './pixelplan.js';
-import * as PLANS from './data/plans.js';
 import { MISSION_LIST, getMission } from './data/missions/index.js';
-import { CUTSCENES, getIntro, pickCutscene } from './data/cutscenes.js';
+import { getIntro } from './data/cutscenes.js';
 import { optionsMultiplier } from './data/options.js';
+import { initCutscene, cutOpen, showCutscene, maybeCutscene, TYPEWRITER_DELAY } from './cutscene.js';
 
 const $ = UI.$, $$ = UI.$$;
 
@@ -169,102 +167,16 @@ function sfxFor(entry) {
 }
 
 // ---------------- cinématiques pixel-art ----------------
-// Overlay plein écran : panneaux { art, lines }, machine à écrire,
-// tap = finir la ligne / ligne suivante / panneau suivant / fin.
-let cutPanels = null, cutPi = 0, cutLi = 0;
-let cutTyping = false, cutTypeTimer = null;
-let cutAnimTimer = null, cutFrame = 0, cutDoneCb = null;
-
-function cutOpen() { return cutPanels !== null; }
-
-function screenMusic() {
-  if ($('#scr-game').classList.contains('active')) return 'game';
-  if ($('#scr-brief').classList.contains('active')) return 'cinematique';
-  return 'menu';
-}
-
-function drawCutFrame() {
-  if (!cutPanels) return;
-  PIX.renderSprite($('#cut-canvas'), CUT.cutSprite(cutPanels[cutPi].art, cutFrame));
-}
-
-function cutShowLine(instant = false) {
-  const line = cutPanels[cutPi].lines[cutLi];
-  const txt = $('#cut-text');
-  if (instant || REDUCED.matches) { txt.textContent = line; cutTyping = false; return; }
-  txt.textContent = '';
-  cutTyping = true;
-  let i = 0;
-  cutTypeTimer = setInterval(() => {
-    i++;
-    txt.textContent = line.slice(0, i);
-    if (i >= line.length) { clearInterval(cutTypeTimer); cutTypeTimer = null; cutTyping = false; }
-  }, 22);
-}
-
-function cutAdvance() {
-  if (!cutPanels) return;
-  if (cutTyping) { // 1er tap : termine la ligne en cours
-    clearInterval(cutTypeTimer); cutTypeTimer = null; cutTyping = false;
-    $('#cut-text').textContent = cutPanels[cutPi].lines[cutLi];
-    return;
-  }
-  cutLi++;
-  if (cutLi >= cutPanels[cutPi].lines.length) {
-    cutPi++; cutLi = 0;
-    if (cutPi >= cutPanels.length) { closeCutscene(); return; }
-    cutFrame = 0;
-    AU.swell();
-    drawCutFrame();
-  }
-  cutShowLine();
-}
-
-function showCutscene(panels, onDone = null, startPanel = 0, instant = false) {
-  if (!panels || !panels.length) { onDone && onDone(); return; }
-  cutPanels = panels; cutPi = startPanel; cutLi = 0; cutDoneCb = onDone;
-  cutFrame = 0;
-  $('#cut-overlay').classList.remove('hidden');
-  drawCutFrame();
-  cutShowLine(instant);
-  if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
-  if (!REDUCED.matches) cutAnimTimer = setInterval(() => { cutFrame++; drawCutFrame(); }, 125);
-  AU.setAmbience('cinematique');
-  AU.setTension({ cut: true });
-}
-
-function closeCutscene() {
-  if (cutTypeTimer) { clearInterval(cutTypeTimer); cutTypeTimer = null; }
-  if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
-  cutPanels = null; cutTyping = false;
-  $('#cut-overlay').classList.add('hidden');
-  const cb = cutDoneCb; cutDoneCb = null;
-  AU.setTension({ cut: false });
-  AU.setAmbience(screenMusic());
-  pumpVig();                       // la file de vignettes reprend
-  if (cb) cb();
-}
-
-$('#cut-overlay').addEventListener('click', () => cutAdvance());
-$('#btn-cut-skip').addEventListener('click', (e) => { e.stopPropagation(); closeCutscene(); });
-
-// cinématiques de milieu de partie : déclencheurs, une fois chacune.
-// Jamais pendant une vignette, jamais en mode auto, après le délai de frappe.
-function maybeCutscene() {
-  if (!saveEnabled || !illusOn() || !game) return;
-  if (game.result || game.phase === 'choice') return;
-  if (cutOpen() || vigBusy || vigQueue.length) return;
-  if (!game.cutsSeen) game.cutsSeen = [];
-  const c = pickCutscene(game, game.cutsSeen);
-  if (!c) return;
-  setTimeout(() => {
-    if (cutOpen() || !game || game.result || game.phase === 'choice') return;
-    if (vigBusy || vigQueue.length) return;
-    game.cutsSeen.push(c.key);
-    persistGame();
-    showCutscene(c.panels, null);
-  }, TYPEWRITER_DELAY);
-}
+// Joueur d'overlay (panneaux { art, lines }, machine à écrire,
+// tap = finir ligne → ligne → panneau → fin) : js/cutscene.js.
+initCutscene({
+  illusOn,
+  getGame: () => game,
+  saveEnabled: () => saveEnabled,
+  persistGame,
+  pumpVig,
+  vigActive: () => vigBusy || vigQueue.length > 0,
+});
 
 // ---------------- teinte de menace ----------------
 let lastTintThreat = null;
@@ -370,8 +282,6 @@ function syncGameUI(instantLog = false) {
   if (game.result) setTimeout(showDebrief, TYPEWRITER_DELAY);
   maybeCutscene();
 }
-
-const TYPEWRITER_DELAY = 2400;
 
 function updateEndPhaseBtn() {
   const b = $('#btn-endphase');
@@ -869,451 +779,38 @@ if ('serviceWorker' in navigator) {
 }
 
 // ---------------- init ----------------
-(function init() {
-  const s = CAM.loadSettings();
+// api injecté dans js/debug.js (chargé dynamiquement uniquement en
+// mode ?debug — jamais en production). L'accès à l'état mutable se
+// fait par getters/setters : debug.js n'importe pas main.js.
+const debugApi = {
+  get game() { return game; },
+  get campaign() { return campaign; },
+  set campaign(c) { campaign = c; },
+  get pendingMission() { return pendingMission; },
+  set pendingMission(m) { pendingMission = m; },
+  set optsSel(o) { optsSel = o; },
+  get tutoIndex() { return tutoIndex; },
+  set tutoIndex(i) { tutoIndex = i; },
+  TUTO_STEPS,
+  get chronoLeft() { return chronoLeft; },
+  set chronoLeft(v) { chronoLeft = v; },
+  get chronoTimer() { return chronoTimer; },
+  launchMission, openBriefing, showHQ, showDebrief,
+  syncGameUI, afterAction, openTab, dismissVig,
+  resetLog: () => { logCursor = 0; },
+  showTutoStep,
+};
+
+(async function init() {
   UI.updateGyro(3);
-  // Accès direct aux écrans (tests manuels / captures) : #hq, #brief:<id>, #game:<id>, #debrief:<id>
+  // Harnais de test/capture : ?debug#auto:<mode> (cf. js/debug.js).
+  // saveEnabled = false AVANT tout mode auto : aucune écriture localStorage.
   const h = location.hash.slice(1);
   if (h.startsWith('auto:') && location.search.includes('debug')) {
     saveEnabled = false;
-    let mode = h.slice(5);
-    campaign = CAM.defaultCampaign();
-    campaign.agentName = 'Doc';
-    // préfixe « rep:<p>:<h>:… » : fixe les jauges de réputation puis enchaîne le mode
-    if (mode.startsWith('rep:')) {
-      const parts = mode.slice(4).split(':');
-      campaign.rep = { presse: Math.max(0, Math.min(10, +parts[0] || 5)), hierarchie: Math.max(0, Math.min(10, +parts[1] || 5)) };
-      campaign.repLast = {
-        hierarchie: 'Le rapport est bouclé. Rentrez dormir, demain sera un autre jour.',
-        presse: 'J\'ai assez pour un papier de vingt lignes. Ni plus, ni moins.',
-      };
-      mode = parts.slice(2).join(':');
-    }
-    // découpe "<missionId>[:p1[:p2]]" en tenant compte des ids « gen:<seed> »
-    const splitId = (rest, nParams) => {
-      const parts = rest.split(':');
-      for (let k = Math.min(nParams, parts.length - 1); k >= 0; k--) {
-        const mid = parts.slice(0, parts.length - k).join(':');
-        if (getMission(mid)) return [mid, ...parts.slice(parts.length - k)];
-      }
-      return [rest];
-    };
-    if (mode === 'hq' || mode === 'hq:unlocked') {
-      if (mode === 'hq:unlocked') {
-        // campagne mémoire pré-remplie : classiques gagnées → avancés débloqués (rien n'est sauvegardé)
-        campaign.missions['tutoriel'] = { finished: true, wins: 1, plays: 1, bestScore: 620, bestGrade: 'B', bestOutcome: 'surrender' };
-        campaign.missions['braquage'] = { finished: true, wins: 1, plays: 2, bestScore: 740, bestGrade: 'A', bestOutcome: 'liberation' };
-        campaign.missions['hopital'] = { finished: true, wins: 1, plays: 1, bestScore: 590, bestGrade: 'B', bestOutcome: 'surrender' };
-      }
-      showHQ(); return;
-    }
-    if (mode === 'gallery') { UI.renderGallery(); UI.showScreen('scr-gallery'); return; }
-    if (mode === 'cutgallery') { renderCutGallery(); return; }
-    if (mode === 'plangallery') { renderPlanGallery(); return; }
-    if (mode.startsWith('cut:')) {
-      // #auto:cut:<missionId>:<intro|cléMid>[:<panneau>] — figé pour capture
-      const [, mid, key, pi] = mode.split(':');
-      showCutsceneDebug(mid, key, pi);
-      return;
-    }
-    if (mode.startsWith('flowgo:')) {
-      // chaîne complète : intro → « Passer » → briefing → « Ouvrir la ligne »
-      pendingMission = mode.slice(7);
-      showCutscene(getIntro(pendingMission), () => openBriefing(pendingMission), 0, true);
-      closeCutscene();
-      launchMission();
-      return;
-    }
-    if (mode.startsWith('midcut:')) {
-      // force une cinématique de milieu de partie : #auto:midcut:<id>:<clé>:<pas>
-      const parts = mode.slice(7).split(':');
-      pendingMission = parts[0];
-      launchMission();
-      const steps = parseInt(parts[2] || '0', 10);
-      for (let i = 0; i < steps && !game.result; i++) {
-        if (game.phase === 'choice') { E.chooseOption(game, 0); continue; }
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
-        } else E.endPhase(game);
-      }
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      const m = (CUTSCENES[parts[0]].mid || []).find(c => c.key === parts[1]);
-      if (m) showCutscene(m.panels, null, 0, true);
-      return;
-    }
-    if (mode === 'tutocheck') { runTutoCheck(); return; }
-    if (mode === 'chronocheck') { runChronoCheck(); return; }
-    if (mode.startsWith('vig:')) {
-      // vignette persistante pour capture (pas d'auto-dismiss)
-      pendingMission = 'braquage'; launchMission();
-      const kind = mode.slice(4);
-      const ov = $('#vig-overlay');
-      ov.innerHTML = '';
-      const box = UI.el('div', 'vig-box');
-      box.append(PIX.spriteCanvas(PIX.vignetteSprite(kind)), UI.el('div', 'vig-title', kind.toUpperCase()), UI.el('div', 'vig-hint', 'Touchez pour passer'));
-      ov.append(box);
-      ov.classList.remove('hidden');
-      return;
-    }
-    if (mode.startsWith('tuto:')) {
-      pendingMission = 'tutoriel'; launchMission();
-      tutoIndex = Math.min(parseInt(mode.slice(5), 10) || 0, TUTO_STEPS.length - 1);
-      showTutoStep();
-      return;
-    }
-    if (mode.startsWith('rules')) {
-      showHQ();
-      UI.openRules(mode.includes(':') ? mode.slice(6) : null);
-      return;
-    }
-    if (mode.startsWith('brief:')) { openBriefing(mode.slice(6)); return; }
-    if (mode.startsWith('choice:')) {
-      // joue jusqu'au premier choix et affiche la modale DÉCISION
-      pendingMission = mode.slice(7);
-      launchMission();
-      let guard = 0;
-      while (game.phase !== 'choice' && !game.result && guard++ < 500) {
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
-        } else E.endPhase(game);
-      }
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      return;
-    }
-    if (mode.startsWith('game:')) {
-      const parts = splitId(mode.slice(5), 1);
-      pendingMission = parts[0];
-      launchMission();
-      const steps = parseInt(parts[1] || '0', 10);
-      for (let i = 0; i < steps && !game.result; i++) {
-        if (game.phase === 'choice') { E.chooseOption(game, 0); continue; }
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
-        } else E.endPhase(game);
-      }
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      return;
-    }
-    if (mode.startsWith('question:')) {
-      // #auto:question:<missionId>[:<qid>] — avance jusqu'à la question puis
-      // la fige pour capture/vérif. Révèle l'indice lié pour le badge ✓.
-      const parts = splitId(mode.slice(9), 1);
-      pendingMission = parts[0];
-      launchMission();
-      const m = getMission(pendingMission);
-      const q = (m.questions || []).find(x => x.id === parts[1]) || (m.questions || [])[0];
-      if (q) {
-        // révèle l'indice de la première réponse ifClue → badge « cohérent »
-        const withClue = q.replies.find(r => r.effects && r.effects.ifClue);
-        if (withClue) {
-          const c = E.getClue(game, withClue.effects.ifClue.id);
-          if (c) c.revealed = true;
-        }
-        game.turn = Math.max(game.turn, q.minTurn || 1);
-        E.maybeQuestion(game);
-      }
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      return;
-    }
-    if (mode.startsWith('psy:')) {
-      // #auto:psy:<id> — force la situation (menace 6) : entrée « psy »,
-      // pourcentages sur les cartes et avertissements ⚠ pour capture.
-      pendingMission = mode.slice(4);
-      launchMission();
-      game.threat = 6; game.pressure = 4;
-      E.addAdvice(game);
-      syncGameUI(true);
-      return;
-    }
-    if (mode.startsWith('tabs:')) {
-      // #auto:tabs:<id>:<equipe|dossier>[:intel] — partie en phase d'équipe,
-      // onglet ouvert (option : un Renseignement d'abord → plan dévoilé).
-      const parts = splitId(mode.slice(5), 2);
-      pendingMission = parts[0];
-      launchMission();
-      game.phase = 'team';
-      if (parts[2] === 'intel') E.doTeamAction(game, 'intel');
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      openTab(parts[1] === 'dossier' ? 'dossier' : 'equipe');
-      const sec = $('#host-sec');
-      if (sec && parts[1] === 'dossier') sec.scrollIntoView({ block: 'start' });
-      return;
-    }
-    if (mode.startsWith('layout:')) {
-      // mesure le défilement : body ne doit pas défiler, onglets dans l'écran
-      const parts = splitId(mode.slice(7), 1);
-      pendingMission = parts[0];
-      launchMission();
-      const steps = parseInt(parts[1] || '0', 10);
-      for (let i = 0; i < steps && !game.result; i++) {
-        if (game.phase === 'choice') { E.chooseOption(game, 0); continue; }
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
-        } else E.endPhase(game);
-      }
-      logCursor = 0; UI.resetTranscript(); syncGameUI(true);
-      const se = document.scrollingElement;
-      const tabsR = $('#game-tabs').getBoundingClientRect();
-      const trR = $('#transcript').getBoundingClientRect();
-      const hudR = $('#game-hud').getBoundingClientRect();
-      const pre = document.createElement('pre');
-      pre.id = 'layoutcheck';
-      pre.textContent = JSON.stringify({
-        vw: innerWidth, vh: innerHeight,
-        bodyScrollH: se.scrollHeight, bodyNoScroll: se.scrollHeight <= innerHeight,
-        hudTop: Math.round(hudR.top), hudVisible: hudR.top >= 0 && hudR.top < innerHeight,
-        tabsBottom: Math.round(tabsR.bottom), tabsVisible: tabsR.bottom <= innerHeight,
-        transcriptH: Math.round(trR.height), transcriptOK: trR.height >= 80,
-        sceneH: $('#scene-bar').offsetParent ? Math.round($('#scene-bar').getBoundingClientRect().height) : 0,
-      });
-      document.body.append(pre);
-      return;
-    }
-    if (mode.startsWith('debrief:')) {
-      pendingMission = splitId(mode.slice(8), 0)[0]; launchMission();
-      // quelques tours joués pour peupler l'historique et les moments clés
-      for (let i = 0; i < 8 && !game.result; i++) {
-        if (game.pendingChoice) { E.chooseOption(game, 0); continue; }
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
-        } else E.endPhase(game);
-      }
-      // force une fin pour la capture : quelques libérés, une mort, reddition
-      if (!game.result) {
-        const hl = E.ensureHostageList(game);
-        const held = hl.filter(x => x.status === 'held');
-        const nFree = Math.min(3, Math.max(0, game.hostages.remaining - 1));
-        const nDead = game.hostages.killed === 0 && game.hostages.remaining - nFree > 1 ? 1 : 0;
-        for (let i = 0; i < nFree && i < held.length; i++) { held[i].status = 'freed'; held[i].turn = i + 2; }
-        for (let i = 0; i < nDead && nFree + i < held.length; i++) {
-          held[nFree + i].status = 'dead'; held[nFree + i].turn = 5; held[nFree + i].cause = 'Point de rupture';
-        }
-        game.hostages.freed = hl.filter(x => x.status === 'freed').length;
-        game.hostages.killed = hl.filter(x => x.status === 'dead').length;
-        game.hostages.remaining = hl.filter(x => x.status === 'held').length;
-        game.result = { outcome: 'surrender', turn: game.turn, hostages: { ...game.hostages } };
-        game.log.push({ k: 'epilogue', text: getMission(game.missionId).epilogues.surrender, turn: game.turn });
-      }
-      showDebrief();
-      return;
-    }
+    const { initDebug } = await import('./debug.js');
+    if (initDebug(debugApi)) return;
   }
   UI.showScreen('scr-home');
   AU.setAmbience('menu');
 })();
-
-// ---------------- cinématiques : hooks de débogage ----------------
-function showCutsceneDebug(mid, key, panelIndex) {
-  const def = CUTSCENES[mid];
-  if (!def) return;
-  const panels = key === 'intro' ? def.intro : (def.mid.find(c => c.key === key) || {}).panels;
-  if (!panels) return;
-  const p = Math.min(parseInt(panelIndex || '0', 10) || 0, panels.length - 1);
-  showCutscene(panels, null, p, true);   // lignes affichées entières, prêt pour capture
-}
-
-// Grille des plans tactiques (capture) : les 6 bases, plan connu.
-function renderPlanGallery() {
-  const host = $('#gallery-body');
-  host.innerHTML = '';
-  host.append(UI.el('h3', null, 'PLANS TACTIQUES — plan des lieux établi'));
-  const row = UI.el('div', 'gal-row wrap');
-  for (const base of PLANP.PLAN_BASES) {
-    const cell = UI.el('div', 'gal-cell');
-    cell.append(
-      PIX.spriteCanvas(PLANP.planSprite(base, { held: 6, planKnown: true, sniperPost: PLANS.PLANS[base].posts[0].id }, 0), 2),
-      UI.el('div', 'gal-lbl', base));
-    row.append(cell);
-  }
-  host.append(row);
-  UI.showScreen('scr-gallery');
-}
-
-function renderCutGallery() {
-  const host = $('#gallery-body');
-  host.innerHTML = '';
-  host.append(UI.el('h3', null, 'ARTS DE CINÉMATIQUES — frame 0 / frame 3'));
-  const row = UI.el('div', 'gal-row wrap');
-  for (const id of CUT.CUT_ARTS) {
-    for (const f of [0, 3]) {
-      const cell = UI.el('div', 'gal-cell');
-      cell.append(PIX.spriteCanvas(CUT.cutSprite(id, f), 2), UI.el('div', 'gal-lbl', `${id} f${f}`));
-      row.append(cell);
-    }
-  }
-  host.append(row);
-  UI.showScreen('scr-gallery');
-}
-
-// ---------------- vérification automatisée du chrono ----------------
-// ?debug#auto:chronocheck : relances du chrono à chaque phase conversation,
-// timeout (menace +1, phase marché), pause pendant une cinématique,
-// et relance après un choix en mission avancée. Rapport JSON → <pre id="chronocheck">.
-async function runChronoCheck() {
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const R = { ok: true };
-  const fail = (k, info) => { R.ok = false; R[k] = info; };
-  campaign.settings.illus = false;              // pas de cinématique/vignette auto pendant le check
-  const launch = (id) => { pendingMission = id; optsSel = { chrono: true }; launchMission(); };
-  const endPhase = () => { E.endPhase(game); afterAction(); };
-  // avance jusqu'à la prochaine phase de conversation (sort d'abord si on y est)
-  const drain = () => {
-    let g = 0;
-    if (game.phase === 'conversation') endPhase();
-    while (!game.result && game.phase !== 'conversation' && g++ < 20) {
-      if (game.phase === 'choice') { E.chooseOption(game, 0); afterAction(); }
-      else endPhase();
-    }
-  };
-
-  try {
-    // (1) tour 1 : le chrono décompte
-    launch('braquage');
-    const a0 = chronoLeft;
-    await sleep(2100);
-    if (!(chronoLeft < a0)) fail('t1', { a0, a1: chronoLeft });
-
-    // (2) tour complet → tour 2 : chrono relancé à 60 et décompte
-    drain();
-    if (!(game.phase === 'conversation' && chronoTimer && chronoLeft === 60)) {
-      fail('t2restart', { phase: game.phase, timer: !!chronoTimer, left: chronoLeft });
-    }
-    await sleep(2100);
-    if (!(chronoLeft < 60)) fail('t2count', { left: chronoLeft });
-
-    // (3) timeout : menace +1, phase marché, relance au tour suivant
-    const th = game.threat;
-    chronoLeft = 2;
-    await sleep(3200);
-    if (!(game.threat === th + 1 && game.phase === 'market')) {
-      fail('timeout', { was: th, threat: game.threat, phase: game.phase });
-    }
-    drain();
-    if (!(game.phase === 'conversation' && chronoTimer)) fail('t3restart', { phase: game.phase, timer: !!chronoTimer });
-
-    // (4) pause pendant une cinématique, reprise à la fermeture
-    const before = chronoLeft;
-    showCutscene([{ art: 'lunette', lines: ['Test de pause.'] }], null, 0, true);
-    await sleep(2100);
-    const frozen = chronoLeft === before;
-    closeCutscene();
-    await sleep(2100);
-    if (!frozen) fail('cutpause', { before, during: chronoLeft });
-    if (!(chronoLeft < before)) fail('cutresume', { before, after: chronoLeft });
-
-    // (5) mission avancée : après un choix, si phase conversation le chrono tourne.
-    // La seed est aléatoire → on retente jusqu'à atteindre un choix.
-    let tries = 0;
-    while (tries++ < 8 && !(game && game.phase === 'choice')) {
-      launch('secte');
-      let guard = 0;
-      while (game.phase !== 'choice' && !game.result && guard++ < 300) {
-        if (game.phase === 'conversation') {
-          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
-          if (cid) { E.playCard(game, cid, null); afterAction(); } else endPhase();
-        } else endPhase();
-      }
-    }
-    if (game.phase === 'choice') {
-      E.chooseOption(game, 0);
-      afterAction();
-      if (game.phase === 'conversation' && !chronoTimer) {
-        fail('choice', { phase: game.phase, timer: !!chronoTimer });
-      }
-      R.afterChoice = { phase: game.phase, timer: !!chronoTimer, left: chronoLeft };
-    } else R.choiceSkipped = game.phase;
-  } catch (e) { fail('exception', String(e && e.stack || e)); }
-  const pre = document.createElement('pre');
-  pre.id = 'chronocheck';
-  pre.textContent = JSON.stringify(R);
-  document.body.append(pre);
-}
-
-// ---------------- vérification automatisée du tutoriel ----------------
-// ?debug#auto:tutocheck : parcourt chaque étape, vérifie via elementFromPoint
-// que la cible est atteignable (et pas masquée par la boîte tuto), puis joue
-// l'action attendue par de vrais click() DOM. Rapport JSON → <pre id="tutocheck">.
-async function runTutoCheck() {
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const report = { ok: true, viewport: `${innerWidth}x${innerHeight}`, steps: [] };
-
-  function hitTest(el) {
-    const r = el.getBoundingClientRect();
-    const x = Math.floor(r.left + r.width / 2), y = Math.floor(r.top + r.height / 2);
-    const hit = document.elementFromPoint(x, y);
-    const inTarget = !!(hit && (hit === el || el.contains(hit)));
-    const inBox = !!(hit && hit.closest && hit.closest('.tuto-box'));
-    const inOverlay = !!(hit && hit.closest && (hit.closest('#card-modal') || hit.closest('#tab-panel') || hit.closest('#vig-overlay')));
-    return {
-      x, y, ok: inTarget && !inBox,
-      hit: hit ? (hit.id || hit.className || hit.tagName) : null,
-      inTarget, inBox, modalBlocking: inOverlay,
-    };
-  }
-
-  pendingMission = 'tutoriel';
-  launchMission();
-  await sleep(50);
-
-  for (let i = 0; i < TUTO_STEPS.length; i++) {
-    const step = TUTO_STEPS[i];
-    // purge : vignette éventuelle + panneau d'onglets resté ouvert
-    dismissVig();
-    const panel = $('#tab-panel');
-    if (!panel.classList.contains('hidden')) {
-      panel.classList.add('hidden');
-      $$('#game-tabs button.on').forEach(b => b.classList.remove('on'));
-    }
-    await sleep(30);
-    const entry = { step: i, sel: step.sel, advanceOn: step.advanceOn || 'next', checks: {} };
-    const target = $(step.sel);
-    entry.checks.target = target ? hitTest(target) : { ok: false, missing: true };
-    if (step.sel === '#hand') {
-      const c = $('#hand .card');
-      entry.checks.firstCard = c ? hitTest(c) : { ok: false, missing: true };
-    }
-    entry.ok = Object.values(entry.checks).every(c => c.ok !== false);
-    if (!entry.ok) report.ok = false;
-
-    // joue l'action attendue par de vrais clicks DOM
-    if (step.advanceOn === 'card') {
-      const c = $('#hand .card');
-      if (c) c.click();
-      await sleep(30);
-      const play = $('#card-modal .m-card .btn-primary');
-      entry.action = play ? 'card→modal→jouer' : 'card→pas-de-bouton-jouer';
-      if (play) play.click(); else report.ok = false;
-      await sleep(750);  // laisse le jet de dés finir + l'étape avancer (delay 650)
-    } else if (step.advanceOn === 'tab') {
-      const b = $('#game-tabs button[data-tab="marche"]');
-      entry.action = 'tab:marche';
-      if (b) b.click(); else report.ok = false;
-      await sleep(30);
-    } else if (step.advanceOn === 'phase') {
-      const b = $('#btn-endphase');
-      entry.action = 'endphase';
-      if (b) b.click(); else report.ok = false;
-      await sleep(30);
-    } else {
-      const b = $('#btn-tuto-next');
-      entry.action = 'compris';
-      if (b) b.click(); else report.ok = false;
-      await sleep(30);
-    }
-    entry.advancedTo = tutoIndex;
-    entry.advanced = tutoIndex > i;
-    if (!entry.advanced) report.ok = false;
-    report.steps.push(entry);
-  }
-  report.tutoIndexFinal = tutoIndex;
-  report.finished = tutoIndex >= TUTO_STEPS.length;
-  const pre = document.createElement('pre');
-  pre.id = 'tutocheck';
-  pre.textContent = JSON.stringify(report, null, 1);
-  document.body.appendChild(pre);
-}
