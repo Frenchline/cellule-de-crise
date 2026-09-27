@@ -8,6 +8,7 @@ import { BASE_CARDS, MARKET_CARDS, ALL_CARDS, getCard } from './data/cards.js';
 import { TERROR_GENERIC, TERROR_COMPLICE } from './data/terror.js';
 import { getMission } from './data/missions/index.js';
 import { SKILLS } from './data/skills.js';
+import { adviceFor } from './advice.js';
 
 export const PHASES = ['conversation', 'market', 'team'];
 export const PHASE_LABELS = {
@@ -415,6 +416,72 @@ export function diceModifier(state, card) {
 export function cardDicePool(state, card) {
   if (card.auto) return 0;
   return Math.max(1, (card.dice || 0) + diceModifier(state, card));
+}
+
+// ---------------- Probabilités de paliers ----------------
+// Chaque dé réussit sur 5-6 → p = 1/3. Distribution binomiale exacte.
+const P_SUCCESS = 1 / 3;
+function binomP(n, k) {
+  if (k < 0 || k > n) return 0;
+  let c = 1;
+  for (let i = 0; i < k; i++) c = c * (n - i) / (i + 1);
+  return c * Math.pow(P_SUCCESS, k) * Math.pow(1 - P_SUCCESS, n - k);
+}
+
+// Probabilité par palier : keys = seuils d'effets triés. Chaque palier
+// couvre les succès de sa clé jusqu'à la clé suivante (la plus grande
+// = « k+ »), exactement comme effectRow. Retour : { [seuil]: proba }.
+export function tierOdds(pool, keys) {
+  const ks = [...keys].map(Number).filter(k => !isNaN(k)).sort((a, b) => a - b);
+  const res = {};
+  ks.forEach((k, i) => {
+    const hi = i === ks.length - 1 ? pool : ks[i + 1] - 1;
+    let p = 0;
+    for (let s = Math.max(k, 0); s <= hi && s <= pool; s++) p += binomP(pool, s);
+    res[k] = p;
+  });
+  return res;
+}
+
+// Probabilités des paliers d'une carte dans l'état courant (pool réel).
+// Carte auto → null. Jets « sûrs » du tutoriel (riggedRolls) → le palier
+// le plus haut est garanti à 100 %.
+export function cardOdds(state, card) {
+  if (!card || card.auto) return null;
+  const keys = Object.keys(card.effects).map(Number).filter(k => !isNaN(k));
+  if (!keys.length) return null;
+  const odds = tierOdds(cardDicePool(state, card), keys);
+  if (state.flags.riggedRolls > 0) {
+    const top = Math.max(...keys);
+    for (const k of keys) odds[k] = k === top ? 1 : 0;
+  }
+  return odds;
+}
+
+// Alerte rouge sur une carte : le palier d'échec (seuil le plus bas)
+// ferait passer la menace à 7 (rupture → mort d'un otage) ou la
+// pression à 10 (assaut forcé).
+export function failRisk(state, card) {
+  if (!card || card.auto) return null;
+  const k0 = Math.min(...Object.keys(card.effects).map(Number).filter(n => !isNaN(n)));
+  const eff = card.effects[k0];
+  if (!eff) return null;
+  if (eff.threat > 0 && state.threat + eff.threat >= 7) return 'kill';
+  if (eff.pressure > 0 && state.pressure + eff.pressure >= 10) return 'assault';
+  return null;
+}
+
+// ---------------- Conseil de la psychologue ----------------
+// advice.js est pur ; l'entrée passe par le journal moteur, donc elle
+// est persistée par la sauvegarde et ré-affichée à la reprise.
+export function addAdvice(state) {
+  if (!state || state.result) return null;
+  const adv = adviceFor(state, state.adviceSeen || {});
+  if (!adv) return null;
+  if (!state.adviceSeen) state.adviceSeen = {};
+  state.adviceSeen[adv.key] = state.turn;
+  log(state, 'psy', adv.text);
+  return adv;
 }
 
 // ---------------- Résolution d'effets ----------------

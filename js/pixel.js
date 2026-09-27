@@ -122,6 +122,12 @@ export const PLAYER_PORTRAIT = {
   clothes: 'nego', accessory: 'radio', age: 'adulte',
 };
 
+// Psychologue de la cellule (conseils « psy » du transcript)
+export const PSY_PORTRAIT = {
+  skin: 'clair', hair: 'chignon', hairColor: 'noir', glasses: true,
+  clothes: 'blouse', age: 'adulte', sex: 'f',
+};
+
 const CLOTHES = {
   sweat:    { col: 'u', dark: 'U' },
   chemise:  { col: 'w', dark: 'c' },

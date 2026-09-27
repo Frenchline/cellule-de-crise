@@ -279,6 +279,7 @@ body.in-game { overflow: hidden; }
 .tl-death .who { color: var(--red); }
 .tl-dice .who { color: var(--green); }
 .tl-clue .who { color: var(--amber); }
+.tl-psy .who { color: #4fc9bd; }
 .tl-epilogue .who { color: var(--amber); }
 .tl .txt { flex: 1; }
 .tl-player .txt { color: #bcd0ea; font-style: italic; }
@@ -289,6 +290,7 @@ body.in-game { overflow: hidden; }
 .tl-death .txt { color: #ff9b9b; font-weight: 600; }
 .tl-dice .txt { color: var(--green); font-family: var(--mono); font-size: 12px; }
 .tl-clue .txt { color: var(--amber); }
+.tl-psy .txt { color: #8fd8cf; font-size: 12.5px; }
 .tl-epilogue .txt { color: var(--ink); font-family: var(--serif); font-style: italic; }
 
 /* ---------- zone de dés ---------- */
@@ -539,6 +541,13 @@ body.in-game { overflow: hidden; }
 }
 .card .c-effline { display: flex; gap: 4px; }
 .card .c-tier { color: #7fd695; font-weight: 700; min-width: 16px; }
+.card .c-odds, .shop-card .c-odds { color: var(--dim); font-family: var(--mono); font-size: .85em; min-width: 26px; }
+.card .c-risk {
+  margin-top: 2px; font-size: 9.5px; line-height: 1.25; font-weight: 600;
+  color: #ff8080;
+}
+.m-risk { margin: 8px 0; color: #ff8080; font-weight: 600; font-size: 13px; }
+.btn-danger { background: #8c2f2f !important; border-color: #ff6b6b !important; color: #fff !important; }
 .card .c-tagrow { display: flex; justify-content: space-between; align-items: baseline; gap: 4px; }
 .card .c-block { font-family: var(--mono); font-size: 9px; color: var(--amber); text-align: right; line-height: 1.2; }
 .card.disabled .c-block { color: var(--red); }

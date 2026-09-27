@@ -1,10 +1,9 @@
-// Tests : cinématiques (données, arts pixelcut, déclencheurs) + tensionLevel
+// Tests : cinématiques (données, arts pixelcut, déclencheurs)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { CUTSCENES, getIntro, pickCutscene } from '../js/data/cutscenes.js';
 import { cutSprite, CUT_ARTS } from '../js/pixelcut.js';
 import { validateSprite } from '../js/pixel.js';
-import { tensionLevel } from '../js/audio.js';
 import { createGame } from '../js/engine.js';
 
 // ---------- cohérence données ↔ arts ----------
@@ -91,15 +90,4 @@ test('pickCutscene : pressureGte', () => {
   assert.equal(pickCutscene(g, [])?.key, 'media');
 });
 
-// ---------- tensionLevel ----------
-test('tensionLevel : mapping menace → piste, brouillard → tendu', () => {
-  assert.equal(tensionLevel(1, false), 'calme');
-  assert.equal(tensionLevel(2, false), 'calme');
-  assert.equal(tensionLevel(3, false), 'tendu');
-  assert.equal(tensionLevel(4, false), 'tendu');
-  assert.equal(tensionLevel(5, false), 'danger');
-  assert.equal(tensionLevel(6, false), 'danger');
-  assert.equal(tensionLevel(7, false), 'panique');
-  assert.equal(tensionLevel(7, true), 'tendu');
-  assert.equal(tensionLevel(1, true), 'tendu');
-});
+

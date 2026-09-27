@@ -22,7 +22,7 @@ function set(k, v) { try { store && store.setItem(k, v); } catch { /* quota */ }
 function del(k) { try { store && store.removeItem(k); } catch { } }
 
 // ---------------- Campagne ----------------
-const DEFAULT_SETTINGS = { mute: false, volume: 0.7, flash: true, music: true };
+const DEFAULT_SETTINGS = { mute: false, volume: 0.7, flash: true, music: true, advice: true };
 
 export function defaultCampaign() {
   return {

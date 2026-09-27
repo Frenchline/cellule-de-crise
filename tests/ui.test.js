@@ -49,14 +49,16 @@ test('shortEffects — conditionnels', () => {
   assert.ok(s3.includes('si en_mer→'), s3);
 });
 
-test('cardTierLines — carte à dés', () => {
+test('cardTierLines — carte à dés avec probabilités', () => {
   const g = createGame({ missionId: 'braquage', seed: 42 });
   const lines = cardTierLines({ effects: { 0: { threat: 1 }, 1: { threat: -1 }, 2: { threat: -2 } } }, g);
   assert.deepEqual(lines.map(l => l[0]), ['✗', '1', '2+']);
-  assert.equal(lines[0][1], 'menace +1');
+  // pool effectif : 1 dé (pas de champ dice → max(1, 0 + mod)) → 67/33/0 %
+  assert.deepEqual(lines.map(l => l[1]), ['67%', '33%', '0%']);
+  assert.equal(lines[0][2], 'menace +1');
   // carte auto
   const auto = cardTierLines({ auto: true, effects: { auto: { threat: -1 } } }, g);
-  assert.deepEqual(auto, [['✓', 'menace −1']]);
+  assert.deepEqual(auto, [['✓', null, 'menace −1']]);
 });
 
 // ---------------- portraits ----------------

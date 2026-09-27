@@ -7,12 +7,9 @@ import { loadSettings, saveSettings } from './campaign.js';
 
 let ctx = null;
 let master = null;
-let ambientNodes = null;
-let heartTimer = null;
 let sirenTimer = null;
 let settings = loadSettings();
 let started = false;
-let threat = 4;
 
 export function audioSettings() { return { ...settings }; }
 
@@ -30,7 +27,9 @@ function persist() { saveSettings(settings); }
 
 export function setMuted(m) { settings.mute = m; if (master) master.gain.value = m ? 0 : settings.volume; persist(); }
 export function setVolume(v) { settings.volume = v; if (master && !settings.mute) master.gain.value = v; persist(); }
-export function setMusicEnabled(m) { settings.music = m; if (musicGain) musicGain.gain.value = m !== false ? MUSIC_VOL : 0.0001; persist(); }
+// « Ambiance sonore » (clé music des réglages) : nappes + radio.
+// Les SFX, stingers et le tic-tac suivent le mute général seul.
+export function setAmbienceEnabled(m) { settings.music = m; if (ambGain) ambGain.gain.value = m !== false ? 1 : 0.0001; persist(); }
 
 // Démarrage — à appeler sur un geste utilisateur
 export function initAudio() {
@@ -42,14 +41,14 @@ export function initAudio() {
   master.gain.value = settings.mute ? 0 : settings.volume;
   master.connect(ctx.destination);
   started = true;
-  musicGain = ctx.createGain();
-  musicGain.gain.value = settings.music !== false ? MUSIC_VOL : 0.0001;
-  musicGain.connect(master);
+  ambGain = ctx.createGain();
+  ambGain.gain.value = settings.music !== false ? 1 : 0.0001;
+  ambGain.connect(master);
   noiseBuf = noiseBuffer(1);
-  if (!seqTimer) seqTimer = setInterval(seqTick, 25);
+  buildBed();
+  updateBed();
   if (!tickTimer) tickTock();
-  startAmbience();
-  startHeartbeat();
+  if (!radioTimer) radioTick();
   scheduleSiren();
 }
 
@@ -68,56 +67,8 @@ function env(node, t0, a, peak, d, sustain = 0.0001) {
   node.gain.exponentialRampToValueAtTime(Math.max(sustain, 0.0001), t0 + a + d);
 }
 
-// ---------------- nappe d'ambiance ----------------
-function startAmbience() {
-  const g = ctx.createGain();
-  g.gain.value = 0.05;
-  g.connect(master);
-
-  // drone grave
-  const o1 = ctx.createOscillator();
-  o1.type = 'sine'; o1.frequency.value = 55;
-  const o2 = ctx.createOscillator();
-  o2.type = 'sine'; o2.frequency.value = 55.7;
-  const og = ctx.createGain(); og.gain.value = 0.5;
-  o1.connect(og); o2.connect(og); og.connect(g);
-  o1.start(); o2.start();
-
-  ambientNodes = g;
-}
-
-// ---------------- battement de coeur ----------------
-// Audible à partir de la menace 4 ; sous brouillard, rythme fixe
-// (la menace réelle ne doit pas fuiter via l'audio).
-export function setThreat(t) { threat = t; }
-
-function heartbeat() {
-  if (!ctx) return;
-  const eff = tension.fog ? 4.6 : threat;
-  const interval = Math.max(450, 1500 - eff * 140); // ms
-  const amp = Math.min(0.5, 0.1 + eff * 0.05);
-  const beat = (t0, vol) => {
-    const o = ctx.createOscillator();
-    o.type = 'sine'; o.frequency.setValueAtTime(70, t0);
-    o.frequency.exponentialRampToValueAtTime(40, t0 + 0.15);
-    const g = ctx.createGain();
-    o.connect(g); g.connect(master);
-    env(g, t0, 0.01, vol, 0.18);
-    o.start(t0); o.stop(t0 + 0.3);
-    // partiel plus haut : reste audible sur les petits haut-parleurs
-    const o2 = ctx.createOscillator();
-    o2.type = 'triangle'; o2.frequency.setValueAtTime(110, t0);
-    o2.frequency.exponentialRampToValueAtTime(80, t0 + 0.12);
-    const g2 = ctx.createGain();
-    o2.connect(g2); g2.connect(master);
-    env(g2, t0, 0.008, vol * 0.5, 0.1);
-    o2.start(t0); o2.stop(t0 + 0.25);
-  };
-  const t = ctx.currentTime;
-  if (eff >= 4) { beat(t, amp); beat(t + interval * 0.32 / 1000, amp * 0.7); }
-  heartTimer = setTimeout(heartbeat, interval);
-}
-function startHeartbeat() { if (!heartTimer) heartbeat(); }
+// Conservée pour les appelants existants : écrit tension.threat.
+export function setThreat(t) { tension.threat = t; updateBed(); }
 
 // ---------------- sirène lointaine ----------------
 function scheduleSiren() {
@@ -241,84 +192,74 @@ export function playJingle(win) {
   });
 }
 
-// ============================================================
-// Musique procédurale — séquenceur lookahead (~25 ms, fenêtre
-// 120 ms), voix chiptune sombres : lead carré + passe-bas,
-// basse triangle, hats/snare en bruit filtré, nappes sciées.
-// ============================================================
-const MUSIC_VOL = 1;      // niveaux des voix = valeurs absolues
-const MIDI = (m) => 440 * Math.pow(2, (m - 69) / 12);
+// Menace +1 : boom grave 80→50 Hz + corps 200-400 Hz + claquement.
+export function playThreatUp() {
+  if (!ctx || !noiseBuf) return;
+  const t = ctx.currentTime;
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(80, t);
+  o.frequency.exponentialRampToValueAtTime(50, t + 0.3);
+  const g = ctx.createGain();
+  o.connect(g); g.connect(master);
+  env(g, t, 0.005, 0.14, 0.45);
+  o.start(t); o.stop(t + 0.55);
+  const o2 = ctx.createOscillator(); o2.type = 'triangle';
+  o2.frequency.setValueAtTime(340, t);
+  o2.frequency.exponentialRampToValueAtTime(210, t + 0.22);
+  const g2 = ctx.createGain();
+  o2.connect(g2); g2.connect(master);
+  env(g2, t, 0.004, 0.1, 0.28);
+  o2.start(t); o2.stop(t + 0.38);
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1200; f.Q.value = 1.2;
+  const ng = ctx.createGain();
+  src.connect(f); f.connect(ng); ng.connect(master);
+  env(ng, t, 0.001, 0.1, 0.08);
+  src.start(t); src.stop(t + 0.12);
+}
 
-let musicGain = null;
-let seqTimer = null;
+// Menace −1 : deux notes descendantes, soulagement discret.
+export function playThreatDown() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  [[392, 'sine'], [311, 'triangle']].forEach(([fr, ty], i) => {
+    const t0 = t + i * 0.16;
+    const o = ctx.createOscillator(); o.type = ty; o.frequency.value = fr;
+    const g = ctx.createGain();
+    o.connect(g); g.connect(master);
+    env(g, t0, 0.01, 0.07, 0.35);
+    o.start(t0); o.stop(t0 + 0.45);
+  });
+}
+
+// Mort d'un otage : après le coup de feu, un bourdon dissonant
+// (deux sines à une seconde mineure) qui s'éteint en ~3 s.
+export function playDeathTone() {
+  if (!ctx) return;
+  const t = ctx.currentTime + 0.35;
+  for (const fr of [110, 116.5]) {
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = fr;
+    const o2 = ctx.createOscillator(); o2.type = 'triangle';
+    o2.frequency.value = fr * 2; o2.detune.value = 5;
+    const g = ctx.createGain();
+    o.connect(g); o2.connect(g); g.connect(master);
+    env(g, t, 0.25, 0.09, 2.7);
+    o.start(t); o.stop(t + 3.1);
+    o2.start(t); o2.stop(t + 3.1);
+  }
+}
+
+// ============================================================
+// Design sonore procédural — pas de musique. Tout est calibré
+// pour les haut-parleurs de téléphone (~150 Hz – 3 kHz,
+// aucune couche purement sub-grave).
+// ============================================================
+let ambGain = null;            // bus ambiance (réglage « Ambiance sonore »)
 let noiseBuf = null;
-let musicMode = null;          // 'menu' | 'cinematique' | 'game' | null
-let curTrack = null, pendingTrack = null;
-let seqStep = 0, nextT = 0;
+let ambMode = null;            // 'menu' | 'cinematique' | 'game' | null
 const tension = { threat: 1, deckLeft: 99, fog: false, over: false, chronoLeft: null, cut: false };
 
-// helper de patterns : { stepIndex: valeur } → tableau épars
-function pat(map, len) {
-  const a = new Array(len).fill(null);
-  for (const k in map) a[+k] = map[k];
-  return a;
-}
-
-const TRACKS = {
-  // lent, mélancolique, épars — accueil / QG / débrief
-  menu: {
-    bpm: 60, len: 64,
-    pad: { 0: [45, 57, 60, 64], 16: [41, 53, 57, 60], 32: [36, 48, 55, 60], 48: [40, 52, 56, 59] },
-    bass: pat({ 0: 33, 16: 29, 32: 36, 48: 28 }, 64),
-    lead: pat({ 8: 76, 24: 74, 44: 72, 56: 69 }, 64),
-  },
-  // nappe sombre + arpège grave — cinématiques / briefing
-  cinematique: {
-    bpm: 56, len: 32,
-    pad: { 0: [33, 45, 52, 57], 16: [31, 43, 50, 55] },
-    bass: pat({ 0: 21, 4: 28, 8: 33, 12: 28, 16: 21, 20: 28, 24: 31, 28: 28 }, 32),
-    lead: pat({ 0: 69 }, 32),
-  },
-  // ~70 bpm, arpège La mineur épars
-  calme: {
-    bpm: 70, len: 32,
-    bass: pat({ 0: 33, 16: 33 }, 32),
-    lead: pat({ 0: 57, 6: 60, 12: 64, 22: 60, 28: 64 }, 32),
-  },
-  // ~90 bpm, ostinato de basse + motif en demi-tons
-  tendu: {
-    bpm: 90, len: 16,
-    bass: pat({ 0: 33, 4: 33, 8: 33, 12: 33, 14: 34 }, 16),
-    lead: pat({ 0: 64, 2: 65, 8: 64, 10: 65 }, 16),
-    hat: pat({ 8: 1, 12: 1 }, 16),
-  },
-  // ~112 bpm, basse en croches, lead triton, caisse
-  danger: {
-    bpm: 112, len: 32,
-    bass: pat({ 0: 33, 2: 33, 4: 33, 6: 33, 8: 33, 10: 33, 12: 33, 14: 33, 16: 33, 18: 33, 20: 33, 22: 33, 24: 33, 26: 33, 28: 33, 30: 31 }, 32),
-    lead: pat({ 0: 69, 8: 63, 16: 69, 24: 63 }, 32),
-    snare: pat({ 8: 1, 24: 1 }, 32),
-    hat: pat({ 4: 1, 12: 1, 20: 1, 28: 1 }, 32),
-  },
-  // ~135 bpm, arpège diminué + hats rapides
-  panique: {
-    bpm: 135, len: 16,
-    bass: pat({ 0: 33, 4: 33, 8: 33, 12: 33 }, 16),
-    lead: pat({ 0: 57, 2: 60, 4: 63, 6: 66, 8: 69, 10: 66, 12: 63, 14: 60 }, 16),
-    snare: pat({ 4: 1, 12: 1 }, 16),
-    hat: pat({ 0: 1, 2: 1, 4: 1, 6: 1, 8: 1, 10: 1, 12: 1, 14: 1 }, 16),
-  },
-};
-
-export function tensionLevel(threatLvl, fog) {
-  if (fog) return 'tendu';
-  if (threatLvl >= 7) return 'panique';
-  if (threatLvl >= 5) return 'danger';
-  if (threatLvl >= 3) return 'tendu';
-  return 'calme';
-}
-
-export function setMusic(mode) { musicMode = mode; }
+export function setAmbience(mode) { ambMode = mode; updateBed(); }
 
 export function setTension(o = {}) {
   if (o.threat != null) tension.threat = o.threat;
@@ -327,94 +268,124 @@ export function setTension(o = {}) {
   if ('chronoLeft' in o) tension.chronoLeft = o.chronoLeft;
   if ('over' in o) tension.over = !!o.over;
   if ('cut' in o) tension.cut = !!o.cut;
+  updateBed();
 }
 
-function desiredTrack() {
-  if (musicMode === 'menu') return 'menu';
-  if (musicMode === 'cinematique') return 'cinematique';
-  if (musicMode === 'game') return tensionLevel(tension.threat, tension.fog);
-  return null;
-}
+// ---------------- nappe de tension ----------------
+// 3 voix désaccordées ~A2-E3 (sciées + triangle) dans un passe-bas
+// dont la coupure monte avec la menace ; LFO lent = respiration.
+// Menace ≥ 6 : voix dissonante (seconde mineure) ; à 7 : trémolo.
+// Transitions douces (~1,5 s). Brouillard : niveau fixe médian.
+let bedFilter = null, bedGain = null, bedVoices = [], bedDiss = null;
+let lfoDepth = null, tremDepth = null;
 
-// ---------------- voix ----------------
-function vNote(type, midi, t0, dur, vol, lp) {
-  const o = ctx.createOscillator();
-  o.type = type; o.frequency.value = MIDI(midi);
-  const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp;
-  const g = ctx.createGain();
-  o.connect(f); f.connect(g); g.connect(musicGain);
-  env(g, t0, 0.008, vol, dur);
-  o.start(t0); o.stop(t0 + dur + 0.1);
-}
-function vPad(midis, t0, dur) {
-  for (const m of midis) for (const det of [-4, 3]) {
+function buildBed() {
+  bedFilter = ctx.createBiquadFilter();
+  bedFilter.type = 'lowpass'; bedFilter.frequency.value = 300; bedFilter.Q.value = 1.1;
+  bedGain = ctx.createGain(); bedGain.gain.value = 0;
+  bedFilter.connect(bedGain); bedGain.connect(ambGain);
+
+  const mk = (type, fr, det) => {
     const o = ctx.createOscillator();
-    o.type = 'sawtooth'; o.frequency.value = MIDI(m); o.detune.value = det;
-    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 460;
+    o.type = type; o.frequency.value = fr; o.detune.value = det;
+    const g = ctx.createGain(); g.gain.value = 0;
+    o.connect(g); g.connect(bedFilter); o.start();
+    return { o, g };
+  };
+  bedVoices = [
+    mk('sawtooth', 110, -9),     // A2
+    mk('sawtooth', 110, 8),      // A2 désaccordé
+    mk('triangle', 164.8, 0),    // E3
+  ];
+  bedDiss = mk('sawtooth', 116.5, 0);   // A#2 : seconde mineure
+
+  const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 0.13;
+  lfoDepth = ctx.createGain(); lfoDepth.gain.value = 0;
+  lfo.connect(lfoDepth); lfoDepth.connect(bedFilter.frequency); lfo.start();
+
+  const tr = ctx.createOscillator(); tr.type = 'sine'; tr.frequency.value = 4.6;
+  tremDepth = ctx.createGain(); tremDepth.gain.value = 0;
+  tr.connect(tremDepth); tremDepth.connect(bedGain.gain); tr.start();
+}
+
+function bedGate() {
+  if (ambMode === 'menu' || ambMode === 'cinematique') return 0.5;
+  if (ambMode === 'game' && !tension.over) return 1;
+  return 0;
+}
+
+function updateBed() {
+  if (!ctx || !bedGain) return;
+  const t = ctx.currentTime;
+  const gate = bedGate();
+  const menuish = ambMode !== 'game';
+  const th = tension.fog ? 4 : tension.threat;
+  const cut = menuish ? 260 : 300 + (th - 1) * 250;        // 300 → 1800 Hz
+  const vv = menuish ? 0.02 : 0.018 + (th - 1) * 0.0055;   // ~0.018 → 0.051
+  bedGain.gain.setTargetAtTime(gate, t, 1.5);
+  bedFilter.frequency.setTargetAtTime(cut, t, 1.5);
+  lfoDepth.gain.setTargetAtTime(menuish ? 50 : cut * 0.3, t, 1.5);
+  for (const v of bedVoices) v.g.gain.setTargetAtTime(vv, t, 1.5);
+  bedDiss.g.gain.setTargetAtTime(!menuish && th >= 6 ? vv * 0.8 : 0, t, 1.5);
+  tremDepth.gain.setTargetAtTime(!menuish && th >= 7 ? 0.3 : 0, t, 1.5);
+}
+
+// Renflement bref de la nappe au changement de panneau (cinématique).
+export function swell() {
+  if (!ctx || !bedGain || ambMode !== 'cinematique') return;
+  const t = ctx.currentTime;
+  bedGain.gain.cancelScheduledValues(t);
+  bedGain.gain.setTargetAtTime(bedGate() * 1.9, t, 0.08);
+  bedGain.gain.setTargetAtTime(bedGate(), t + 0.55, 0.4);
+}
+
+// ---------------- radio de la cellule ----------------
+// Toutes les ~18-45 s (plus souvent menace ≥ 5) : squelch, puis bruit
+// passe-bande découpé en « syllabes » irrégulières, squelch de fin.
+let radioTimer = null;
+
+export function playRadioChatter() {
+  if (!ctx || !noiseBuf) return;
+  const t = ctx.currentTime;
+  const dur = 1 + Math.random() * 1.5;
+  const squelch = (t0, fr) => {
+    const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = fr;
     const g = ctx.createGain();
-    o.connect(f); f.connect(g); g.connect(musicGain);
-    env(g, t0, dur * 0.35, 0.018, dur * 0.6);
-    o.start(t0); o.stop(t0 + dur + 0.15);
+    o.connect(g); g.connect(ambGain);
+    env(g, t0, 0.002, 0.045, 0.03);
+    o.start(t0); o.stop(t0 + 0.06);
+  };
+  squelch(t, 2600);
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 1.4;
+  f.frequency.setValueAtTime(900 + Math.random() * 350, t);
+  f.frequency.linearRampToValueAtTime(1900 + Math.random() * 600, t + dur);
+  const am = ctx.createGain(); am.gain.value = 0;
+  src.connect(f); f.connect(am); am.connect(ambGain);
+  // portes « syllabiques » ~4-9 par seconde, amplitude irrégulière
+  let tt = t + 0.07;
+  const end = t + dur;
+  while (tt < end - 0.1) {
+    am.gain.setTargetAtTime(0.03 + Math.random() * 0.2, tt, 0.015);
+    tt += 0.11 + Math.random() * 0.14;
   }
-}
-function vHat(t0, vol = 0.03) {
-  const src = ctx.createBufferSource(); src.buffer = noiseBuf;
-  const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000;
-  const g = ctx.createGain();
-  src.connect(f); f.connect(g); g.connect(musicGain);
-  env(g, t0, 0.002, vol, 0.04);
-  src.start(t0); src.stop(t0 + 0.08);
-}
-function vSnare(t0) {
-  const src = ctx.createBufferSource(); src.buffer = noiseBuf;
-  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.8;
-  const g = ctx.createGain();
-  src.connect(f); f.connect(g); g.connect(musicGain);
-  env(g, t0, 0.003, 0.06, 0.12);
-  src.start(t0); src.stop(t0 + 0.16);
+  am.gain.setTargetAtTime(0.0001, end - 0.12, 0.03);
+  src.start(t + 0.05); src.stop(end);
+  squelch(end + 0.03, 2100);
 }
 
-// ---------------- boucle du séquenceur ----------------
-function scheduleStep(s, t0) {
-  const tr = TRACKS[curTrack];
-  if (!tr) return;
-  const i = s % tr.len;
-  const stepDur = 60 / tr.bpm / 4;
-  if (tr.pad && tr.pad[i]) vPad(tr.pad[i], t0, stepDur * 16);
-  // basse transposée +12 : sinon inaudible sur haut-parleur de téléphone
-  if (tr.bass && tr.bass[i] != null) vNote('triangle', tr.bass[i] + 12, t0, stepDur * 3.2, 0.09, 900);
-  if (tr.lead && tr.lead[i] != null) vNote('square', tr.lead[i], t0, stepDur * 2.6, 0.05, 2000);
-  if (tr.hat && tr.hat[i]) vHat(t0);
-  if (tr.snare && tr.snare[i]) vSnare(t0);
+function radioTick() {
+  if (!ctx) return;
+  const th = tension.fog ? 4 : tension.threat;
+  if (ambMode === 'game' && !tension.over && !tension.cut) playRadioChatter();
+  const wait = th >= 5 ? 10000 + Math.random() * 14000 : 18000 + Math.random() * 27000;
+  radioTimer = setTimeout(radioTick, wait);
 }
-
-function seqTick() {
-  if (!ctx || !musicGain) return;
-  const want = desiredTrack();
-  if (want !== curTrack && want !== pendingTrack) pendingTrack = want;
-  if (nextT < ctx.currentTime - 0.3) nextT = ctx.currentTime + 0.03;
-  const horizon = ctx.currentTime + 0.12;
-  while (nextT < horizon) {
-    // bascule à la prochaine barre avec courte fondu
-    if (seqStep % 16 === 0 && pendingTrack != null) {
-      const sw = Math.max(nextT, ctx.currentTime);
-      musicGain.gain.cancelScheduledValues(ctx.currentTime);
-      musicGain.gain.setTargetAtTime(0.0001, Math.max(sw - 0.07, ctx.currentTime), 0.03);
-      musicGain.gain.setTargetAtTime(settings.music !== false ? MUSIC_VOL : 0.0001, sw, 0.09);
-      curTrack = pendingTrack;
-      pendingTrack = null;
-    }
-    if (curTrack) scheduleStep(seqStep, nextT);
-    const bpm = curTrack ? TRACKS[curTrack].bpm : 90;
-    nextT += 60 / bpm / 4;
-    seqStep++;
-  }
-}
-
 // ---------------- tic-tac (horloge murale) ----------------
-// Bloc de bois, deux hauteurs. En partie : 1/s doux en continu,
-// plus fort à ≤4 cartes Terreur, 2/s au maximum à ≤2 ou chrono ≤10 s.
-// Muet hors écran de jeu, après le résultat et pendant une cinématique.
+// Bloc de bois, deux hauteurs. Seulement quand la pioche Terreur
+// devient courte : ≤4 cartes → 1/s ; ≤2 ou chrono ≤10 s → 2/s,
+// plus fort. Muet hors écran de jeu, après le résultat et pendant
+// une cinématique.
 let tickTimer = null, tickHigh = false;
 
 function tickSound(hi, vol = 0.06) {
@@ -438,11 +409,10 @@ function tickSound(hi, vol = 0.06) {
 function tickTock() {
   if (!ctx) return;
   let interval = 0, vol = 0;
-  if (musicMode === 'game' && !tension.over && !tension.cut) {
+  if (ambMode === 'game' && !tension.over && !tension.cut) {
     const cl = tension.chronoLeft, dl = tension.deckLeft;
     if ((cl != null && cl <= 10) || dl <= 2) { interval = 500; vol = 0.16; }
     else if (dl <= 4) { interval = 1000; vol = 0.12; }
-    else { interval = 1000; vol = 0.06; }
   }
   if (interval) tickSound(tickHigh = !tickHigh, vol);
   tickTimer = setTimeout(tickTock, interval || 500);

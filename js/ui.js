@@ -9,6 +9,7 @@ import {
   PHASE_LABELS, canPlayCard, cardDicePool, diceModifier, describeEffects,
   canBuy, teamActionsLeft, getDemandDef, getClueDef, pendingDemands,
   getMissionDef, threatLabelFr, assaultRisk, getTaker, roman, getChoice,
+  cardOdds, failRisk,
 } from './engine.js';
 import { getRank, RANKS, missionUnlocked } from './campaign.js';
 import * as PIX from './pixel.js';
@@ -73,7 +74,7 @@ export function skipTypewrite(fullText, elTxt) {
 const WHO = {
   player: 'VOUS', taker: 'LUI', sys: '·', radio: 'RADIO',
   dice: 'DÉS', terror: 'TERREUR', death: '☠', clue: 'DOSSIER', epilogue: 'RAPPORT',
-  act: 'ACTE',
+  act: 'ACTE', psy: 'PSY — DR ANSELME',
 };
 const TYPEWRITER_KINDS = new Set(['player', 'taker', 'epilogue']);
 let typeQueue = [];
@@ -95,7 +96,12 @@ export function appendLogEntries(entries, opts = {}) {
     const row = el('div', `tl tl-${e.k}`);
     // petit avatar pixel devant VOUS / LUI
     let av = null, avSpec = null, avExpr = 'calme';
-    if ((e.k === 'player' || e.k === 'taker') && opts.portraits) {
+    if (e.k === 'psy' && opts.portraits) {
+      avSpec = PIX.PSY_PORTRAIT;
+      av = PIX.spriteCanvas(PIX.portraitSprite(avSpec, 'calme'));
+      av.className = 'tl-av';
+      row.append(av);
+    } else if ((e.k === 'player' || e.k === 'taker') && opts.portraits) {
       avSpec = e.k === 'player' ? opts.portraits.player : opts.portraits.taker;
       if (avSpec) {
         avExpr = e.k === 'taker' ? (opts.mood || 'calme') : 'calme';
@@ -356,13 +362,19 @@ function counterIconsFor(state) {
   return m;
 }
 
-// lignes « paliers » d'une carte : [['✗','menace +1'],['1','…'],['2+','…']] ou [['✓','…']]
+// lignes « paliers » d'une carte : [['✗','30%','menace +1'],['1','44%','…'],…]
+// ou [['✓',null,'…']] pour une carte auto. % = probabilité exacte du palier.
 export function cardTierLines(card, state) {
   const icons = counterIconsFor(state);
-  if (card.auto) return [['✓', shortEffects(card.effects.auto, icons)]];
+  if (card.auto) return [['✓', null, shortEffects(card.effects.auto, icons)]];
   const keys = Object.keys(card.effects).map(Number).filter(k => !isNaN(k)).sort((a, b) => a - b);
   const max = Math.max(...keys);
-  return keys.map(k => [k === 0 ? '✗' : k === max && max > 0 ? `${k}+` : String(k), shortEffects(card.effects[k], icons)]);
+  const odds = cardOdds(state, card);
+  return keys.map(k => [
+    k === 0 ? '✗' : k === max && max > 0 ? `${k}+` : String(k),
+    odds ? `${Math.round(odds[k] * 100)}%` : null,
+    shortEffects(card.effects[k], icons),
+  ]);
 }
 
 // ---------------- main de cartes ----------------
@@ -381,12 +393,16 @@ export function renderHand(state, onCard) {
     mrow.append(el('span', 'c-meta', meta), el('span', 'c-cost', `${card.cost} PC`));
     div.append(mrow);
     const eff = el('div', 'c-eff');
-    for (const [t, s] of cardTierLines(card, state)) {
+    for (const [t, pct, s] of cardTierLines(card, state)) {
       const row = el('div', 'c-effline');
-      row.append(el('span', 'c-tier', t), el('span', null, s));
+      row.append(el('span', 'c-tier', t));
+      if (pct) row.append(el('span', 'c-odds', pct));
+      row.append(el('span', null, s));
       eff.append(row);
     }
     div.append(eff);
+    const risk = failRisk(state, card);
+    if (risk) div.append(el('div', 'c-risk', risk === 'kill' ? '⚠ Échec : un otage peut mourir' : '⚠ Échec : assaut forcé'));
     const tagrow = el('div', 'c-tagrow');
     tagrow.append(el('span', 'c-tag', TAGS[card.tag] || ''));
     if (used) tagrow.append(el('span', 'c-block', 'Déjà jouée'));
@@ -415,9 +431,11 @@ export function renderTab(state, tab, handlers) {
       row.append(el('span', 'price', `${c.buy} PC`));
       const desc = el('div', 'c-desc', c.desc);
       const eff = el('div', 'c-eff');
-      for (const [t, s] of cardTierLines(c, state)) {
+      for (const [t, pct, s] of cardTierLines(c, state)) {
         const r = el('div', 'c-effline');
-        r.append(el('span', 'c-tier', t), el('span', null, s));
+        r.append(el('span', 'c-tier', t));
+        if (pct) r.append(el('span', 'c-odds', pct));
+        r.append(el('span', null, s));
         eff.append(r);
       }
       const btn = el('button', 'btn btn-small btn-primary', 'Acheter');
@@ -706,9 +724,28 @@ export function openCardModal(state, cardId, handlers) {
   const rows = card.auto ? [['auto', card.effects.auto]] : Object.entries(card.effects);
   const maxKey = Math.max(...rows.map(([k]) => Number(k) || 0));
   const label = k => k === 'auto' ? 'toujours' : Number(k) === maxKey && maxKey > 0 ? `${k}+` : k;
-  eff.textContent = rows.map(([k, e]) => `${label(k)} → ${describeEffects(e)}`).join('   |   ');
+  const odds = cardOdds(state, card);
+  eff.textContent = rows.map(([k, e]) =>
+    `${label(k)}${odds ? ` ${Math.round(odds[Number(k)] * 100)}%` : ''} → ${describeEffects(e)}`).join('   |   ');
   box.append(eff);
   const chk = canPlayCard(state, cardId);
+  const risk = failRisk(state, card);
+  const failP = odds ? odds[Math.min(...Object.keys(odds).map(Number))] : 0;
+  const risky = !!(risk && failP >= 0.25);
+  let armed = false;
+  const guard = (btn, run) => {
+    if (!risky) { run(); return; }
+    if (!armed) {
+      armed = true;
+      btn.classList.add('btn-danger');
+      btn.textContent = '⚠ Confirmer malgré le risque';
+      return;
+    }
+    run();
+  };
+  if (risk) box.append(el('div', 'm-risk', risk === 'kill'
+    ? '⚠ Échec : la menace peut atteindre 7 — un otage peut mourir'
+    : '⚠ Échec : la presse peut atteindre 10 — assaut forcé'));
   if (!chk.ok) box.append(el('div', 'm-cond', `✖ ${chk.reason}`));
   else if (card.condText) box.append(el('div', 'm-cond', `Condition : ${card.condText}`));
 
@@ -727,13 +764,13 @@ export function openCardModal(state, cardId, handlers) {
     for (const dd of pendingDemands(state)) {
       const def = getDemandDef(state, dd.id);
       const b = el('button', 'target-btn', `${def.major ? '★ ' : ''}${def.label}`);
-      b.addEventListener('click', () => handlers.play(cardId, dd.id));
+      b.addEventListener('click', () => guard(b, () => handlers.play(cardId, dd.id)));
       tg.append(b);
     }
     box.append(tg);
   } else if (chk.ok) {
     const play = el('button', 'btn btn-primary', 'Jouer cette carte');
-    play.addEventListener('click', () => handlers.play(cardId, null));
+    play.addEventListener('click', () => guard(play, () => handlers.play(cardId, null)));
     box.append(play);
   }
   const cancel = el('button', 'btn', 'Fermer');
@@ -811,6 +848,7 @@ export const RULES = [
     id: 'sec-cartes', title: 'Cartes et dés',
     body: [
       'Chaque dé réussi sur <b>5-6</b>. Le palier de l\'effet dépend du nombre de succès : « ✗ » = 0 succès (souvent un effet négatif), « 1 » = 1 succès, « 2+ » = 2 succès ou plus.',
+      'Le <b>pourcentage</b> de chaque palier est affiché sur la carte — c\'est la probabilité exacte avec vos dés du moment. La ligne rouge <b>⚠</b> signale un échec qui peut tuer un otage (menace → 7) ou forcer l\'assaut (presse → 10) : confirmez avant de jouer.',
       'Les <b>cartes de base</b> (vertes en main) sont réutilisables une fois par tour. Les <b>cartes du marché</b> (bordure en pointillés) sont à usage unique et s\'achètent en phase de préparation au prix indiqué.',
       'Une carte grisée indique pourquoi elle est bloquée : PC insuffisants, condition non remplie, déjà jouée ce tour.',
       'Certaines cartes ont des conditions (ex. « Demander un otage » exige menace ≤ 5) ou une cible (« Négocier une demande » cible une demande en attente).',
@@ -895,6 +933,7 @@ export const RULES = [
       '• Positionnez le tireur quand la menace est < 5 (sinon il vous repère).',
       '• Surveillez la presse : à 9, jouez des cartes qui la baissent ou accélérez.',
       '• Les actions d\'équipe ont un prix caché : renseignement et ravitaillement donnent presse +1 — seul le tireur est « gratuit » (mais repérable si menace ≥ 5).',
+      '• La psychologue de la cellule (<b>PSY — Dr Anselme</b>) intervient au fil de la partie avec des conseils ciblés sur la situation — désactivable dans les réglages du QG.',
     ],
   },
 ];

@@ -48,11 +48,12 @@ function updateMuteBtn() {
 
 function syncSettingsUI() {
   const s = settings();
-  const vol = $('#set-volume'), flash = $('#set-flash'), illus = $('#set-illus'), mus = $('#set-music');
+  const vol = $('#set-volume'), flash = $('#set-flash'), illus = $('#set-illus'), mus = $('#set-music'), adv = $('#set-advice');
   if (vol) vol.value = Math.round((s.volume ?? 0.7) * 100);
   if (flash) flash.checked = s.flash !== false;
   if (illus) illus.checked = s.illus !== false;
   if (mus) mus.checked = s.music !== false;
+  if (adv) adv.checked = s.advice !== false;
 }
 
 function illusOn() { return settings().illus !== false; }
@@ -80,6 +81,7 @@ function newLogEntries() {
 // Menace → humeur de base ; événements récents → humeur ponctuelle
 // (mort d'otage → abattu pendant la réplique suivante, échec → furieux).
 let moodEvent = null, moodHold = 0;
+let prevThreat = null;
 
 function computeMood() {
   if (moodEvent) return moodEvent;
@@ -158,7 +160,7 @@ function sfxFor(entry) {
   switch (entry.k) {
     case 'taker': case 'radio': AU.playSquelch(); break;
     case 'dice': AU.playDice(); break;
-    case 'death': AU.playGunshot(); break;
+    case 'death': AU.playGunshot(); AU.playDeathTone(); break;
     case 'terror': AU.playTerrorStinger(); break;
     case 'epilogue': break;
   }
@@ -210,6 +212,7 @@ function cutAdvance() {
     cutPi++; cutLi = 0;
     if (cutPi >= cutPanels.length) { closeCutscene(); return; }
     cutFrame = 0;
+    AU.swell();
     drawCutFrame();
   }
   cutShowLine();
@@ -224,7 +227,7 @@ function showCutscene(panels, onDone = null, startPanel = 0, instant = false) {
   cutShowLine(instant);
   if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
   if (!REDUCED.matches) cutAnimTimer = setInterval(() => { cutFrame++; drawCutFrame(); }, 125);
-  AU.setMusic('cinematique');
+  AU.setAmbience('cinematique');
   AU.setTension({ cut: true });
 }
 
@@ -235,7 +238,7 @@ function closeCutscene() {
   $('#cut-overlay').classList.add('hidden');
   const cb = cutDoneCb; cutDoneCb = null;
   AU.setTension({ cut: false });
-  AU.setMusic(screenMusic());
+  AU.setAmbience(screenMusic());
   pumpVig();                       // la file de vignettes reprend
   if (cb) cb();
 }
@@ -322,6 +325,15 @@ function syncGameUI(instantLog = false) {
   UI.renderPhaseBanner(game, chronoLeft);
   UI.renderHand(game, onCardTap);
   UI.updateGyro(game.threat);
+  const entries = newLogEntries();
+  // stingers de variation de menace (jamais sous brouillard ; une mort
+  // a déjà son propre son — pas de threatUp par-dessus)
+  if (prevThreat != null && game.threat !== prevThreat && !(game.options && game.options.brouillard)) {
+    if (game.threat > prevThreat) {
+      if (!entries.some(e => e.k === 'death')) AU.playThreatUp();
+    } else AU.playThreatDown();
+  }
+  prevThreat = game.threat;
   AU.setThreat(game.threat);
   AU.setTension({
     threat: game.threat,
@@ -331,7 +343,6 @@ function syncGameUI(instantLog = false) {
     over: !!game.result,
   });
   syncThreatTint();
-  const entries = newLogEntries();
   UI.appendLogEntries(entries, {
     onEntry: sfxFor, flash: settings().flash, instant: instantLog,
     portraits: illusOn() ? { player: PIX.PLAYER_PORTRAIT, taker: UI.getTakerPortrait(game) } : null,
@@ -421,11 +432,23 @@ function doPlayCard(cardId, targetId, useReroll) {
   afterAction();
 }
 
+// Conseil de la psy : une entrée « psy » au début de chaque phase de
+// conversation (la clé se répète au plus toutes les 3 tours, côté moteur).
+let lastPhase = null;
+function maybeAdvice() {
+  if (!game || game.result || game.phase !== 'conversation') return;
+  if (lastPhase === 'conversation') return;
+  if (settings().advice === false) return;
+  E.addAdvice(game);
+}
+
 function afterAction() {
   // nouvelle phase de conversation (tour suivant, après un choix) → relance le chrono.
   // chronoTimer peut survivre <1 s à la sortie de conversation (intervalle pas encore
   // tické) : on vérifie aussi le tour, sinon le chrono repartirait avec le temps restant.
   if (game.phase === 'conversation' && (!chronoTimer || chronoTurn !== game.turn)) startChrono();
+  maybeAdvice();
+  lastPhase = game.phase;
   syncGameUI();
   refreshOpenTab();
   persistGame();
@@ -603,7 +626,7 @@ function openBriefing(missionId) {
   optsSel = {};
   refreshBriefing();
   UI.showScreen('scr-brief');
-  AU.setMusic('cinematique');
+  AU.setAmbience('cinematique');
 }
 
 function refreshBriefing() {
@@ -627,6 +650,7 @@ function launchMission() {
   });
   logCursor = 0;
   moodEvent = null; moodHold = 0; resultVigShown = false;
+  lastPhase = null; prevThreat = null;
   missionStartMs = Date.now(); animFrame = 0;
   vigQueue.length = 0; vigBusy = false;
   lastTintThreat = null;
@@ -635,8 +659,10 @@ function launchMission() {
   $('#tab-panel').classList.add('hidden');
   applyIllusSettings();
   UI.showScreen('scr-game');
-  AU.setMusic('game');
+  AU.setAmbience('game');
   AU.playRing();
+  maybeAdvice();
+  lastPhase = game.phase;
   syncGameUI();
   startChrono();
   startAnim();
@@ -658,7 +684,7 @@ function showDebrief() {
   const rank = CAM.getRank(campaign.xp);
   UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn());
   UI.showScreen('scr-debrief');
-  AU.setMusic('menu');
+  AU.setAmbience('menu');
   AU.playJingle(outcome !== 'defeat');
 }
 
@@ -681,7 +707,7 @@ function showHQ() {
   updateMuteBtn();
   syncSettingsUI();
   UI.showScreen('scr-hq');
-  AU.setMusic('menu');
+  AU.setAmbience('menu');
   AU.setThreat(1);
   syncThreatTint();
 }
@@ -694,11 +720,14 @@ function resumeGame() {
   logCursor = 0;
   missionStartMs = Date.now();
   lastTintThreat = null;
+  lastPhase = null; prevThreat = null;
   UI.resetTranscript();
   UI.clearDice();
   applyIllusSettings();
   UI.showScreen('scr-game');
-  AU.setMusic('game');
+  AU.setAmbience('game');
+  maybeAdvice();
+  lastPhase = game.phase;
   syncGameUI(true);
   startChrono();
   startAnim();
@@ -707,7 +736,7 @@ function resumeGame() {
 // ---------------- navigation ----------------
 $('#btn-start').addEventListener('click', () => {
   AU.initAudio();
-  AU.setMusic('menu');
+  AU.setAmbience('menu');
   campaign = CAM.loadCampaign();
   if (campaign && campaign.agentName) {
     showHQ();
@@ -757,7 +786,10 @@ $('#set-illus').addEventListener('change', e => {
 $('#set-music').addEventListener('change', e => {
   AU.initAudio();
   persistSettings({ music: e.target.checked });
-  AU.setMusicEnabled(e.target.checked);
+  AU.setAmbienceEnabled(e.target.checked);
+});
+$('#set-advice').addEventListener('change', e => {
+  persistSettings({ advice: e.target.checked });
 });
 
 // bandeau scène : tap = replier / déplier (persisté)
@@ -905,6 +937,16 @@ if ('serviceWorker' in navigator) {
       logCursor = 0; UI.resetTranscript(); syncGameUI(true);
       return;
     }
+    if (mode.startsWith('psy:')) {
+      // #auto:psy:<id> — force la situation (menace 6) : entrée « psy »,
+      // pourcentages sur les cartes et avertissements ⚠ pour capture.
+      pendingMission = mode.slice(4);
+      launchMission();
+      game.threat = 6; game.pressure = 4;
+      E.addAdvice(game);
+      syncGameUI(true);
+      return;
+    }
     if (mode.startsWith('layout:')) {
       // mesure le défilement : body ne doit pas défiler, onglets dans l'écran
       const parts = mode.slice(7).split(':');
@@ -948,7 +990,7 @@ if ('serviceWorker' in navigator) {
     }
   }
   UI.showScreen('scr-home');
-  AU.setMusic('menu');
+  AU.setAmbience('menu');
 })();
 
 // ---------------- cinématiques : hooks de débogage ----------------
