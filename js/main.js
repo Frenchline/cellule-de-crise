@@ -470,7 +470,12 @@ function tutoSuspended() {
 function syncTutoVisibility() {
   const ov = $('#tuto-overlay');
   const active = tutoIndex >= 0 && tutoIndex < TUTO_STEPS.length;
-  ov.classList.toggle('hidden', !active || tutoSuspended());
+  const suspended = active && tutoSuspended();
+  ov.classList.toggle('hidden', !active || suspended);
+  // le spot (z-index 56) passerait au-dessus d'une modale ouverte (z 50)
+  // et bloquerait ses boutons — on le retire tant qu'elle est affichée.
+  if (suspended) $$('.tuto-spot').forEach(e => e.classList.remove('tuto-spot'));
+  else if (tutoTarget) tutoTarget.classList.add('tuto-spot');
 }
 
 // La boîte ne doit JAMAIS recouvrir sa cible : en haut si la cible est

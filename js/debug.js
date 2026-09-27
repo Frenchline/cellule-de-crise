@@ -473,6 +473,8 @@ async function runTutoCheck() {
       await sleep(30);
       const play = $('#card-modal .m-card .btn-primary');
       entry.action = play ? 'card→modal→jouer' : 'card→pas-de-bouton-jouer';
+      // hit-test réel : le bouton ne doit pas être recouvert (spot tuto, overlay…)
+      if (play) entry.checks.playBtn = hitTest(play);
       if (play) play.click(); else report.ok = false;
       await sleep(750);  // laisse le jet de dés finir + l'étape avancer (delay 650)
     } else if (step.advanceOn === 'tab') {
