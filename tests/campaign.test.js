@@ -79,6 +79,17 @@ test('sauvegarde/reprise de partie', () => {
   assert.equal(CAM.loadGame(), null);
 });
 
+test('réglages : fusion avec les défauts (joueur de retour)', () => {
+  const store = mockStorage();
+  CAM.setStorage(store);
+  // ancienne sauvegarde sans la clé « music » (réglage ajouté après coup)
+  store.setItem('negociateur_settings_v1', JSON.stringify({ mute: false, volume: 0.7, rain: true, flash: true }));
+  const s = CAM.loadSettings();
+  assert.equal(s.music, true);
+  assert.equal(s.volume, 0.7);
+  assert.equal(s.flash, true);
+});
+
 test('déblocage : scénarios avancés après les 2 classiques gagnées', () => {
   const c = CAM.defaultCampaign();
   const unlocked = () => CAM.missionUnlocked(c, 'secte', MISSION_LIST);

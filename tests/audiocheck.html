@@ -1,30 +1,82 @@
 <!DOCTYPE html>
-<!-- Harnais audio headless : vérifie que le séquenceur, les pistes,
-     la tension et le tic-tac ne lèvent aucune exception.
-     Usage : google-chrome --headless --autoplay-policy=no-user-gesture-required
-             --virtual-time-budget=6000 --dump-dom tests/audiocheck.html -->
+<!-- Harnais audio headless.
+     Smoke (défaut) : séquenceur, pistes, tension, tic-tac sans exception.
+       google-chrome --headless=new --autoplay-policy=no-user-gesture-required
+         --virtual-time-budget=6000 --dump-dom tests/audiocheck.html
+     ?levels : mesure RÉELLE des niveaux via AnalyserNode sur le bus maître
+       (pics/RMS en dBFS). L'horloge AudioContext tourne en temps réel :
+       une image lente (tools/audiowait.py sur :8099) retarde le load ~16 s.
+       python3 tools/audiowait.py &   # serveur de délai, port 8099
+       google-chrome --headless=new --autoplay-policy=no-user-gesture-required
+         --dump-dom "tests/audiocheck.html?levels"
+     Le localStorage est pré-rempli SANS la clé « music » pour simuler
+     un joueur de retour (migration des réglages). -->
 <html><head><meta charset="utf-8"></head><body>
+<script>
+localStorage.setItem('negociateur_settings_v1',
+  JSON.stringify({ mute: false, volume: 0.7, rain: true, flash: true }));
+if (location.search.includes('levels'))
+  document.write('<img src="http://127.0.0.1:8099/wait.png?s=16" style="display:none" alt="">');
+</script>
 <script type="module">
 import * as AU from '../js/audio.js';
 const lines = [];
 let ok = true;
+const pre = document.createElement('pre');
+pre.id = 'audiocheck';
+document.body.append(pre);
+const out = o => { pre.textContent = JSON.stringify(o); };
 const step = (name, fn) => { try { fn(); lines.push(`${name}:ok`); } catch (e) { ok = false; lines.push(`${name}:ERR ${e.message}`); } };
-try {
-  step('initAudio', () => AU.initAudio());
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+step('initAudio', () => AU.initAudio());
+const an = AU.attachAnalyser();
+
+async function measure(ms = 1400) {
+  const buf = new Float32Array(an.fftSize);
+  let peak = 0, rmsM = 0;
+  const t0 = performance.now();
+  while (performance.now() - t0 < ms) {
+    an.getFloatTimeDomainData(buf);
+    let p = 0, s = 0;
+    for (const v of buf) { const a = Math.abs(v); if (a > p) p = a; s += v * v; }
+    if (p > peak) peak = p;
+    const r = Math.sqrt(s / buf.length); if (r > rmsM) rmsM = r;
+    await sleep(35);
+  }
+  const db = v => v > 0 ? +(20 * Math.log10(v)).toFixed(1) : null;
+  return { peak: db(peak), rms: db(rmsM) };
+}
+
+(async () => {
+  const report = { ok, lines, ctx: AU.audioCtxState(), settings: AU.audioSettings() };
   for (const m of ['menu', 'cinematique', 'game', null]) step(`setMusic:${m}`, () => AU.setMusic(m));
-  step('setTension:calme', () => AU.setTension({ threat: 1, deckLeft: 9, fog: false }));
-  step('setTension:tendu', () => AU.setTension({ threat: 4, deckLeft: 6, fog: false }));
-  step('setTension:danger', () => AU.setTension({ threat: 6, deckLeft: 3, fog: false }));
-  step('setTension:panique', () => AU.setTension({ threat: 7, deckLeft: 1, fog: false, chronoLeft: 8 }));
   step('setTension:brouillard', () => AU.setTension({ threat: 7, deckLeft: 0, fog: true }));
-  step('setMusicEnabled', () => { AU.setMusicEnabled(false); AU.setMusicEnabled(true); });
   step('sfx', () => { AU.playDice(); AU.playTerrorStinger(); AU.playGunshot(); AU.playChime(); AU.playSquelch(); });
-} catch (e) { ok = false; lines.push('FATAL ' + e.message); }
-setTimeout(() => {
-  const pre = document.createElement('pre');
-  pre.id = 'audiocheck';
-  pre.textContent = JSON.stringify({ ok, lines });
-  document.body.append(pre);
-}, 800);
+  out(report);
+  if (!location.search.includes('levels')) return;
+  const lv = {};
+  // musique seule : tic-tac coupé (cut), heartbeat coupé (menace 1)
+  AU.setThreat(1);
+  AU.setMusic('game');
+  AU.setTension({ cut: true, over: false, fog: false, deckLeft: 9, threat: 1 });
+  for (const [name, threat] of [['calme', 1], ['tendu', 3], ['danger', 6], ['panique', 7]]) {
+    AU.setTension({ threat });
+    await sleep(1300);            // laisse la piste basculer à la barre
+    lv[name] = await measure(1400);
+  }
+  // tic-tac seul : musique coupée, pioche ≤ 2 → 2 tics/s
+  AU.setMusicEnabled(false);
+  AU.setTension({ cut: false, deckLeft: 1 });
+  await sleep(300);
+  lv.tick = await measure(1300);
+  // battement seul : menace 5 (seuil ≥ 4)
+  AU.setTension({ deckLeft: 9 });
+  AU.setThreat(5);
+  await sleep(300);
+  lv.heartbeat = await measure(1400);
+  report.levels = lv;
+  out(report);
+})();
 </script>
 </body></html>

@@ -14,13 +14,23 @@ let settings = loadSettings();
 let started = false;
 let threat = 4;
 
-export function audioSettings() { return settings; }
+export function audioSettings() { return { ...settings }; }
+
+// Debug uniquement (tests/audiocheck.html) : sonde le bus maître.
+export function attachAnalyser() {
+  if (!ctx) return null;
+  const an = ctx.createAnalyser();
+  an.fftSize = 2048;
+  master.connect(an);
+  return an;
+}
+export function audioCtxState() { return ctx ? ctx.state : 'none'; }
 
 function persist() { saveSettings(settings); }
 
 export function setMuted(m) { settings.mute = m; if (master) master.gain.value = m ? 0 : settings.volume; persist(); }
 export function setVolume(v) { settings.volume = v; if (master && !settings.mute) master.gain.value = v; persist(); }
-export function setMusicEnabled(m) { settings.music = m; if (musicGain) musicGain.gain.value = m ? MUSIC_VOL : 0.0001; persist(); }
+export function setMusicEnabled(m) { settings.music = m; if (musicGain) musicGain.gain.value = m !== false ? MUSIC_VOL : 0.0001; persist(); }
 
 // Démarrage — à appeler sur un geste utilisateur
 export function initAudio() {
@@ -33,7 +43,7 @@ export function initAudio() {
   master.connect(ctx.destination);
   started = true;
   musicGain = ctx.createGain();
-  musicGain.gain.value = settings.music ? MUSIC_VOL : 0.0001;
+  musicGain.gain.value = settings.music !== false ? MUSIC_VOL : 0.0001;
   musicGain.connect(master);
   noiseBuf = noiseBuffer(1);
   if (!seqTimer) seqTimer = setInterval(seqTick, 25);
@@ -73,15 +83,6 @@ function startAmbience() {
   o1.connect(og); o2.connect(og); og.connect(g);
   o1.start(); o2.start();
 
-  // pluie = bruit filtré
-  const src = ctx.createBufferSource();
-  src.buffer = noiseBuffer(2); src.loop = true;
-  const bp = ctx.createBiquadFilter();
-  bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.4;
-  const ng = ctx.createGain(); ng.gain.value = 0.35;
-  src.connect(bp); bp.connect(ng); ng.connect(g);
-  src.start();
-
   ambientNodes = g;
 }
 
@@ -103,6 +104,14 @@ function heartbeat() {
     o.connect(g); g.connect(master);
     env(g, t0, 0.01, vol, 0.18);
     o.start(t0); o.stop(t0 + 0.3);
+    // partiel plus haut : reste audible sur les petits haut-parleurs
+    const o2 = ctx.createOscillator();
+    o2.type = 'triangle'; o2.frequency.setValueAtTime(110, t0);
+    o2.frequency.exponentialRampToValueAtTime(80, t0 + 0.12);
+    const g2 = ctx.createGain();
+    o2.connect(g2); g2.connect(master);
+    env(g2, t0, 0.008, vol * 0.5, 0.1);
+    o2.start(t0); o2.stop(t0 + 0.25);
   };
   const t = ctx.currentTime;
   if (eff >= 4) { beat(t, amp); beat(t + interval * 0.32 / 1000, amp * 0.7); }
@@ -237,7 +246,7 @@ export function playJingle(win) {
 // 120 ms), voix chiptune sombres : lead carré + passe-bas,
 // basse triangle, hats/snare en bruit filtré, nappes sciées.
 // ============================================================
-const MUSIC_VOL = 0.055;
+const MUSIC_VOL = 1;      // niveaux des voix = valeurs absolues
 const MIDI = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 let musicGain = null;
@@ -246,7 +255,7 @@ let noiseBuf = null;
 let musicMode = null;          // 'menu' | 'cinematique' | 'game' | null
 let curTrack = null, pendingTrack = null;
 let seqStep = 0, nextT = 0;
-const tension = { threat: 1, deckLeft: 99, fog: false, over: false, chronoLeft: null };
+const tension = { threat: 1, deckLeft: 99, fog: false, over: false, chronoLeft: null, cut: false };
 
 // helper de patterns : { stepIndex: valeur } → tableau épars
 function pat(map, len) {
@@ -317,6 +326,7 @@ export function setTension(o = {}) {
   if (o.fog != null) tension.fog = !!o.fog;
   if ('chronoLeft' in o) tension.chronoLeft = o.chronoLeft;
   if ('over' in o) tension.over = !!o.over;
+  if ('cut' in o) tension.cut = !!o.cut;
 }
 
 function desiredTrack() {
@@ -343,11 +353,11 @@ function vPad(midis, t0, dur) {
     const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 460;
     const g = ctx.createGain();
     o.connect(f); f.connect(g); g.connect(musicGain);
-    env(g, t0, dur * 0.35, 0.012, dur * 0.6);
+    env(g, t0, dur * 0.35, 0.018, dur * 0.6);
     o.start(t0); o.stop(t0 + dur + 0.15);
   }
 }
-function vHat(t0, vol = 0.028) {
+function vHat(t0, vol = 0.03) {
   const src = ctx.createBufferSource(); src.buffer = noiseBuf;
   const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000;
   const g = ctx.createGain();
@@ -360,7 +370,7 @@ function vSnare(t0) {
   const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.8;
   const g = ctx.createGain();
   src.connect(f); f.connect(g); g.connect(musicGain);
-  env(g, t0, 0.003, 0.05, 0.12);
+  env(g, t0, 0.003, 0.06, 0.12);
   src.start(t0); src.stop(t0 + 0.16);
 }
 
@@ -371,8 +381,9 @@ function scheduleStep(s, t0) {
   const i = s % tr.len;
   const stepDur = 60 / tr.bpm / 4;
   if (tr.pad && tr.pad[i]) vPad(tr.pad[i], t0, stepDur * 16);
-  if (tr.bass && tr.bass[i] != null) vNote('triangle', tr.bass[i], t0, stepDur * 3.2, 0.07, 900);
-  if (tr.lead && tr.lead[i] != null) vNote('square', tr.lead[i], t0, stepDur * 2.6, 0.038, 1300);
+  // basse transposée +12 : sinon inaudible sur haut-parleur de téléphone
+  if (tr.bass && tr.bass[i] != null) vNote('triangle', tr.bass[i] + 12, t0, stepDur * 3.2, 0.09, 900);
+  if (tr.lead && tr.lead[i] != null) vNote('square', tr.lead[i], t0, stepDur * 2.6, 0.05, 2000);
   if (tr.hat && tr.hat[i]) vHat(t0);
   if (tr.snare && tr.snare[i]) vSnare(t0);
 }
@@ -389,7 +400,7 @@ function seqTick() {
       const sw = Math.max(nextT, ctx.currentTime);
       musicGain.gain.cancelScheduledValues(ctx.currentTime);
       musicGain.gain.setTargetAtTime(0.0001, Math.max(sw - 0.07, ctx.currentTime), 0.03);
-      musicGain.gain.setTargetAtTime(settings.music ? MUSIC_VOL : 0.0001, sw, 0.09);
+      musicGain.gain.setTargetAtTime(settings.music !== false ? MUSIC_VOL : 0.0001, sw, 0.09);
       curTrack = pendingTrack;
       pendingTrack = null;
     }
@@ -400,37 +411,39 @@ function seqTick() {
   }
 }
 
-// ---------------- tic-tac (fin de pioche / chrono) ----------------
-// Bloc de bois : deux hauteurs alternées. ≤4 cartes Terreur → 1/s,
-// ≤2 ou chrono ≤10 s → ~2/s. Muet hors partie ou après le résultat.
+// ---------------- tic-tac (horloge murale) ----------------
+// Bloc de bois, deux hauteurs. En partie : 1/s doux en continu,
+// plus fort à ≤4 cartes Terreur, 2/s au maximum à ≤2 ou chrono ≤10 s.
+// Muet hors écran de jeu, après le résultat et pendant une cinématique.
 let tickTimer = null, tickHigh = false;
 
-function tickSound(hi) {
-  if (!ctx) return;
+function tickSound(hi, vol = 0.06) {
+  if (!ctx || !noiseBuf) return;
   const t = ctx.currentTime;
-  const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = hi ? 1500 : 980;
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.value = hi ? 1700 : 1200;
   const g = ctx.createGain();
   o.connect(g); g.connect(master);
-  env(g, t, 0.002, 0.11, 0.05);
+  env(g, t, 0.002, vol, 0.05);
   o.start(t); o.stop(t + 0.08);
   const src = ctx.createBufferSource(); src.buffer = noiseBuf;
   const f = ctx.createBiquadFilter(); f.type = 'bandpass';
-  f.frequency.value = hi ? 3200 : 2200; f.Q.value = 5;
+  f.frequency.value = hi ? 3600 : 2400; f.Q.value = 4;
   const ng = ctx.createGain();
   src.connect(f); f.connect(ng); ng.connect(master);
-  env(ng, t, 0.001, 0.08, 0.035);
-  src.start(t); src.stop(t + 0.06);
+  env(ng, t, 0.001, vol * 0.9, 0.045);
+  src.start(t); src.stop(t + 0.07);
 }
 
 function tickTock() {
   if (!ctx) return;
-  let interval = 0;
-  if (musicMode === 'game' && !tension.over) {
-    const cl = tension.chronoLeft;
-    if (cl != null && cl <= 10) interval = 500;
-    else if (tension.deckLeft <= 2) interval = 500;
-    else if (tension.deckLeft <= 4) interval = 1000;
+  let interval = 0, vol = 0;
+  if (musicMode === 'game' && !tension.over && !tension.cut) {
+    const cl = tension.chronoLeft, dl = tension.deckLeft;
+    if ((cl != null && cl <= 10) || dl <= 2) { interval = 500; vol = 0.16; }
+    else if (dl <= 4) { interval = 1000; vol = 0.12; }
+    else { interval = 1000; vol = 0.06; }
   }
-  if (interval) tickSound(tickHigh = !tickHigh);
+  if (interval) tickSound(tickHigh = !tickHigh, vol);
   tickTimer = setTimeout(tickTock, interval || 500);
 }

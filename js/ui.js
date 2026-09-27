@@ -49,35 +49,6 @@ export function flashDeath(enabled = true) {
   }, 450);
 }
 
-// ---------------- pluie (canvas léger) ----------------
-let rainRAF = null;
-export function startRain(enabled) {
-  const cv = $('#rain');
-  if (rainRAF) { cancelAnimationFrame(rainRAF); rainRAF = null; }
-  if (!enabled || matchMedia('(prefers-reduced-motion: reduce)').matches) { cv.style.display = 'none'; return; }
-  cv.style.display = '';
-  const ctx = cv.getContext('2d');
-  const resize = () => { cv.width = innerWidth; cv.height = innerHeight; };
-  resize();
-  addEventListener('resize', resize);
-  const drops = Array.from({ length: 90 }, () => ({
-    x: Math.random() * innerWidth, y: Math.random() * innerHeight,
-    l: 8 + Math.random() * 14, v: 6 + Math.random() * 9, o: .1 + Math.random() * .25,
-  }));
-  const draw = () => {
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.strokeStyle = '#7a92b8'; ctx.lineWidth = 1;
-    for (const d of drops) {
-      ctx.globalAlpha = d.o;
-      ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 1, d.y + d.l); ctx.stroke();
-      d.y += d.v; if (d.y > cv.height) { d.y = -d.l; d.x = Math.random() * cv.width; }
-    }
-    ctx.globalAlpha = 1;
-    rainRAF = requestAnimationFrame(draw);
-  };
-  draw();
-}
-
 // ---------------- machine à écrire ----------------
 let typeTimer = null;
 let typeDone = null;

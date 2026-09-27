@@ -36,7 +36,6 @@ body {
 button, input { font: inherit; }
 
 /* ---------- effets globaux ---------- */
-#rain { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: .55; }
 #grain {
   position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: .05;
   background-image: repeating-conic-gradient(#000 0 .0001%, #fff .0002% .0003%);
@@ -67,7 +66,7 @@ body.shake { animation: shake .45s linear; }
   75% { transform: translate(-2px,-1px); } 90% { transform: translate(2px,1px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  #rain, #grain { display: none; }
+  #grain { display: none; }
   #gyro { animation: none; }
   body.shake { animation: none; }
 }

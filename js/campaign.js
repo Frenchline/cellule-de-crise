@@ -22,6 +22,8 @@ function set(k, v) { try { store && store.setItem(k, v); } catch { /* quota */ }
 function del(k) { try { store && store.removeItem(k); } catch { } }
 
 // ---------------- Campagne ----------------
+const DEFAULT_SETTINGS = { mute: false, volume: 0.7, flash: true, music: true };
+
 export function defaultCampaign() {
   return {
     version: 1,
@@ -32,7 +34,7 @@ export function defaultCampaign() {
     stress: 0,
     day: 1,
     missions: {}, // id -> {plays, wins, bestScore, bestGrade, finished}
-    settings: { mute: false, volume: 0.7, rain: true, flash: true, music: true },
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 
@@ -129,8 +131,8 @@ export function clearGame() {
 // ---------------- Réglages ----------------
 export function loadSettings() {
   const raw = get(KEY_SETTINGS);
-  if (raw) { try { return JSON.parse(raw); } catch { } }
-  return { mute: false, volume: 0.7, rain: true, flash: true, music: true };
+  if (raw) { try { return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }; } catch { } }
+  return { ...DEFAULT_SETTINGS };
 }
 
 export function saveSettings(s) {

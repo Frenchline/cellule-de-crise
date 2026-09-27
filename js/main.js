@@ -48,9 +48,8 @@ function updateMuteBtn() {
 
 function syncSettingsUI() {
   const s = settings();
-  const vol = $('#set-volume'), rain = $('#set-rain'), flash = $('#set-flash'), illus = $('#set-illus'), mus = $('#set-music');
+  const vol = $('#set-volume'), flash = $('#set-flash'), illus = $('#set-illus'), mus = $('#set-music');
   if (vol) vol.value = Math.round((s.volume ?? 0.7) * 100);
-  if (rain) rain.checked = s.rain !== false;
   if (flash) flash.checked = s.flash !== false;
   if (illus) illus.checked = s.illus !== false;
   if (mus) mus.checked = s.music !== false;
@@ -226,6 +225,7 @@ function showCutscene(panels, onDone = null, startPanel = 0, instant = false) {
   if (cutAnimTimer) { clearInterval(cutAnimTimer); cutAnimTimer = null; }
   if (!REDUCED.matches) cutAnimTimer = setInterval(() => { cutFrame++; drawCutFrame(); }, 125);
   AU.setMusic('cinematique');
+  AU.setTension({ cut: true });
 }
 
 function closeCutscene() {
@@ -234,6 +234,7 @@ function closeCutscene() {
   cutPanels = null; cutTyping = false;
   $('#cut-overlay').classList.add('hidden');
   const cb = cutDoneCb; cutDoneCb = null;
+  AU.setTension({ cut: false });
   AU.setMusic(screenMusic());
   pumpVig();                       // la file de vignettes reprend
   if (cb) cb();
@@ -746,10 +747,6 @@ $('#set-volume').addEventListener('input', e => {
   persistSettings({ volume: v });
   AU.setVolume(v);
 });
-$('#set-rain').addEventListener('change', e => {
-  persistSettings({ rain: e.target.checked });
-  UI.startRain(e.target.checked);
-});
 $('#set-flash').addEventListener('change', e => {
   persistSettings({ flash: e.target.checked });
 });
@@ -802,7 +799,6 @@ if ('serviceWorker' in navigator) {
 // ---------------- init ----------------
 (function init() {
   const s = CAM.loadSettings();
-  UI.startRain(s.rain !== false);
   UI.updateGyro(3);
   // Accès direct aux écrans (tests manuels / captures) : #hq, #brief:<id>, #game:<id>, #debrief:<id>
   const h = location.hash.slice(1);
