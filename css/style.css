@@ -84,22 +84,54 @@ body.in-game { overflow: hidden; }
 .muted { color: var(--dim); font-weight: normal; }
 
 /* ---------- accueil ---------- */
-.home-inner {
-  flex: 1; display: flex; flex-direction: column; justify-content: center;
-  align-items: center; text-align: center; gap: 14px;
+#scr-home {
+  position: relative; overflow: hidden;
+  /* voile sombre en haut pour le titre, léger voile global pour l'ambiance */
+  background:
+    linear-gradient(180deg, rgba(11,15,22,.88) 0%, rgba(11,15,22,.55) 14%, rgba(11,15,22,.10) 30%, rgba(11,15,22,0) 45%),
+    linear-gradient(0deg, rgba(11,15,22,.45) 0%, rgba(11,15,22,0) 18%),
+    url('../assets/accueil.jpg') center 32% / cover no-repeat #0b0f16;
 }
+.home-inner {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; text-align: center;
+  padding: calc(env(safe-area-inset-top, 0px) + 6vh) 18px 0;
+}
+.home-top { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.home-spacer { flex: 1; }
+.home-actions {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: 100%; max-width: 340px;
+  background: rgba(9, 12, 19, .78);
+  border: 1px solid #2a3342; border-radius: 12px;
+  padding: 14px 16px 10px;
+}
+/* laisse visible la console de crise au bas de l'illustration */
+.home-clear { height: 24%; flex-shrink: 0; }
+.home-actions .btn-big { width: 100%; }
 .home-badge {
   font-family: var(--mono); font-size: 11px; letter-spacing: .18em;
   color: var(--amber); border: 1px solid var(--amber-dim);
   padding: 6px 12px; border-radius: 3px;
+  background: rgba(9, 12, 19, .55);
 }
 .home-title {
   font-family: var(--mono); font-size: clamp(38px, 11vw, 56px); margin: 8px 0 0;
   letter-spacing: .08em; color: var(--amber);
-  text-shadow: 0 0 24px rgba(255, 180, 84, .35);
+  text-shadow: 0 0 24px rgba(255, 180, 84, .35), 0 2px 10px rgba(0,0,0,.9);
 }
-.home-sub { color: var(--dim); margin: 0; font-style: italic; }
-.home-note { font-size: 11px; color: #5a554a; }
+.home-sub { color: #d8d2c0; margin: 0; font-style: italic; text-shadow: 0 1px 6px rgba(0,0,0,.9); }
+.home-note { font-size: 11px; color: #8a857a; margin: 0; }
+/* écrans plus larges que hauts (paysage / tablette) : boutons en bas,
+   l'image est recadrée de toute façon */
+@media (orientation: landscape) {
+  .home-clear { height: 4vh; }
+  .home-inner { padding-top: 4vh; }
+}
+@media (max-height: 560px) {
+  .home-clear { height: 2vh; }
+  .home-top { gap: 8px; }
+}
 
 /* ---------- boutons ---------- */
 .btn {

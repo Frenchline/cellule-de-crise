@@ -29,7 +29,7 @@ ELECTRON_RUN_AS_NODE=1 /usr/share/devin-desktop/devin-desktop tools/simulate.js
 
 ## Architecture
 
-- `index.html` — écrans (accueil, dossier, QG, briefing, partie, débriefing)
+- `index.html` — écrans (accueil, dossier, QG, briefing, partie, débriefing). L'accueil utilise `assets/accueil.jpg` en fond cover : titre sur la façade sombre en haut (voile dégradé), panneau de boutons translucide sur la rue, `home-clear` laisse la console de crise visible en bas ; repères paysage/petite hauteur dans les media queries.
 - `css/style.css` — néo-noir + HUD tactique, mobile-first 360px+. En partie, `#scr-game` est `position:fixed` à `height:var(--app-h)` (px réels posés par `main.js` sur `innerHeight`, car `dvh` est peu fiable) et `body.in-game` verrouille le défilement : seul `.transcript` défile, HUD/compteurs/scène en haut, dés/main/onglets en bas. Paliers `max-height` : 700 px (scène 72), 620 px (scène repliée 44 par défaut + cartes 140 + dés 34), 540 px (scène masquée, HUD compact).
 - `js/engine.js` — **moteur pur, sans DOM** : état JSON sérialisable, RNG mulberry32 seedé (état dans `state.rngState`). Phases : `conversation` → `market` → `team` → résolution Terreur → nouveau tour.
 - `js/ui.js` — rendu DOM (HUD, transcription avec machine à écrire, dés, marché, onglets, modale carte)

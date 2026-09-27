@@ -1,5 +1,5 @@
 // Service Worker — cache hors-ligne complet
-const CACHE = 'negociateur-v12';
+const CACHE = 'negociateur-v13';
 const FILES = [
   './',
   './index.html',
@@ -33,6 +33,7 @@ const FILES = [
   './js/data/missions/ferry.js',
   './assets/icon.svg',
   './assets/icon-maskable.svg',
+  './assets/accueil.jpg',
 ];
 
 self.addEventListener('install', e => {
