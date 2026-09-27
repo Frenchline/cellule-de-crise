@@ -128,3 +128,40 @@ test('mission du jour : premier résultat seulement', () => {
   // une autre mission générée ne touche pas le record du jour
   assert.equal(CAM.recordDaily(c, 'gen:999', 'liberation', { score: 700, grade: 'S' }, host), false);
 });
+
+test('réputation : défaut 5/5, migration d\'ancienne sauvegarde', () => {
+  const c = CAM.defaultCampaign();
+  assert.deepEqual(c.rep, { presse: 5, hierarchie: 5 });
+  // ancienne campagne sans rep → merge des défauts au chargement
+  const legacy = { version: 1, agentName: 'X', xp: 0, missions: {} };
+  CAM.saveCampaign(legacy);
+  const loaded = CAM.loadCampaign();
+  assert.deepEqual(loaded.rep, { presse: 5, hierarchie: 5 });
+  CAM.saveCampaign(c); // restaure un état propre pour les tests suivants
+});
+
+test('applyReputation : deltas appliqués, repLast rempli, tutoriel ignoré', () => {
+  const c = CAM.defaultCampaign();
+  const game = {
+    result: { outcome: 'surrender' },
+    pressure: 4, turn: 8,
+    hostages: { killed: 0, freed: 6, remaining: 0, total: 6 },
+    flags: { majorConcessions: 0 },
+  };
+  const report = CAM.applyReputation(c, 'braquage', game);
+  assert.ok(report);
+  assert.equal(c.rep.presse, 7);        // +1 presse ≤5, +1 reddition
+  assert.equal(c.rep.hierarchie, 6);    // +1 reddition
+  assert.equal(report.presse.before, 5);
+  assert.equal(report.presse.after, 7);
+  assert.ok(c.repLast.presse && c.repLast.hierarchie);
+  // tutoriel : pas de réputation
+  const c2 = CAM.defaultCampaign();
+  assert.equal(CAM.applyReputation(c2, 'tutoriel', game), null);
+  assert.equal(c2.rep.presse, 5);
+  // défaite avec morts : bornes
+  const dead = { ...game, result: { outcome: 'defeat' }, pressure: 9, hostages: { killed: 6, freed: 0, remaining: 0, total: 6 } };
+  CAM.applyReputation(c, 'braquage', dead);
+  assert.ok(c.rep.presse <= 10 && c.rep.presse >= 0);
+  assert.equal(c.rep.hierarchie, 4);    // 6 − 2
+});

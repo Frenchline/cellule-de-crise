@@ -64,7 +64,7 @@ function pickRandom(state, arr) {
 }
 
 // ---------------- Création ----------------
-export function createGame({ missionId, seed = 1, skills = [], options = {}, agentName = 'Négociateur', stress = 0 }) {
+export function createGame({ missionId, seed = 1, skills = [], options = {}, agentName = 'Négociateur', stress = 0, rep = null }) {
   const mission = getMission(missionId);
   if (!mission) throw new Error(`Mission inconnue : ${missionId}`);
 
@@ -124,6 +124,9 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
     act: mission.acts ? 0 : null,
     pendingChoice: null, // {choiceId, resume, act}
     counters: {},
+    history: [],          // [{turn, threat, pressure, held}] — graphe du débrief
+    actStartTurn: mission.acts ? 1 : null, // tour de début de l'acte courant
+    assaultAt: 10,        // pression de l'assaut forcé (9 si le préfet s'impatiente)
   };
   for (const c of mission.counters || []) {
     state.counters[c.id] = { id: c.id, label: c.label, icon: c.icon || '◆', value: c.start || 0, max: c.max, resetTo: c.resetTo ?? 0, onMax: c.onMax, cause: c.cause || c.label };
@@ -152,6 +155,14 @@ export function createGame({ missionId, seed = 1, skills = [], options = {}, age
   if (skills.includes('coord_tactique')) state.prep = Math.min(3, SKILLS.coord_tactique.effect.prepStart);
   if (skills.includes('profileur')) revealClues(state, SKILLS.profileur.effect.revealAtStart, true);
 
+  // Réputation de campagne (rep) : modificateurs de départ, moteur pur.
+  rep = rep || {};
+  if (rep.presse >= 8) state.flags.mediaGrace = 2;      // les 2 premiers ticks de presse sautés
+  if (rep.hierarchie >= 8) state.prep = Math.min(3, state.prep + 1);
+  if (rep.hierarchie <= 2) state.assaultAt = 9;
+  if (rep.presse <= 2) changePressure(state, 2);        // la presse vous attend au tournant
+
+  pushHistory(state);
   state.pc = computePC(state);
 
   log(state, 'radio', `— Cellule de crise, ${mission.subtitle}. Ligne ouverte avec ${getTaker(state).name}. —`);
@@ -308,7 +319,13 @@ function hiddenClues(state) {
 
 // ---------------- Journal ----------------
 function log(state, k, text, data = null) {
-  state.log.push({ k, text, data });
+  state.log.push({ k, text, data, turn: state.turn });
+}
+
+// Historique par tour (graphe « DÉROULÉ » du débrief).
+function pushHistory(state) {
+  state.history = state.history || [];
+  state.history.push({ turn: state.turn, threat: state.threat, pressure: state.pressure, held: state.hostages.remaining });
 }
 
 export function describeEffects(eff) {
@@ -362,16 +379,17 @@ function breakpoint(state) {
 function changePressure(state, delta) {
   if (!delta || state.result) return;
   if (delta > 0 && state.options.media) delta *= 2;
+  const cap = state.assaultAt || 10;
   const before = state.pressure;
   state.pressure = Math.max(0, Math.min(10, state.pressure + delta));
   if (state.pressure !== before) {
     log(state, 'sys', `Pression médiatique : ${before} → ${state.pressure}`);
   }
-  if (state.pressure >= 9 && !state.flags.pressureWarned && state.pressure < 10) {
+  if (state.pressure >= cap - 1 && !state.flags.pressureWarned && state.pressure < cap) {
     state.flags.pressureWarned = true;
-    log(state, 'radio', '⚠ Le cabinet du préfet s\'impatiente. À pression 10, l\'assaut sera ordonné.');
+    log(state, 'radio', `⚠ Le cabinet du préfet s'impatiente. À pression ${cap}, l'assaut sera ordonné.`);
   }
-  if (state.pressure >= 10 && !state.flags.forcedAssault) {
+  if (state.pressure >= cap && !state.flags.forcedAssault) {
     state.flags.forcedAssault = true;
     log(state, 'radio', '⛔ ORDRE DU PRÉFET : l\'assaut est décidé. Il aura lieu à la fin de ce tour.');
   }
@@ -570,7 +588,7 @@ export function failRisk(state, card) {
   const eff = card.effects[k0];
   if (!eff) return null;
   if (eff.threat > 0 && state.threat + eff.threat >= 7) return 'kill';
-  if (eff.pressure > 0 && state.pressure + eff.pressure >= 10) return 'assault';
+  if (eff.pressure > 0 && state.pressure + eff.pressure >= (state.assaultAt || 10)) return 'assault';
   return null;
 }
 
@@ -987,7 +1005,12 @@ function postTerror(state, justTransitioned) {
   const every = mission.pressureEvery || 1;
   const skip = (state.skills.includes('presse') && (state.turn % 2 === 1))
     || (every > 1 && state.turn % every !== 0);
-  if (!skip) changePressure(state, 1);
+  if (!skip) {
+    if (state.flags.mediaGrace > 0) {
+      state.flags.mediaGrace--;
+      log(state, 'radio', 'La presse vous ménage — pour l\'instant.');
+    } else changePressure(state, 1);
+  }
   if (state.flags.forcedAssault && !state.result) {
     log(state, 'radio', '⛔ L\'assaut aura lieu dès la fin de la prochaine phase d\'équipe.');
   }
@@ -1015,6 +1038,7 @@ function getTerrorDef(state, id) {
 
 function startTurn(state, freshAct = false) {
   state.turn++;
+  pushHistory(state);
   state.phase = 'conversation';
   state.usedThisTurn = [];
   state.teamActionsLeft = 1;
@@ -1127,6 +1151,7 @@ function transitionAct(state, next) {
   const mission = getMissionDef(state);
   const act = mission.acts[next];
   state.act = next;
+  state.actStartTurn = state.turn + 1; // premier tour de l'acte = tour suivant
   log(state, 'act', `═══ ACTE ${roman(next + 1)} — ${act.title} ═══`);
   for (const p of act.intro || []) log(state, 'act', p);
   applyActAdds(state, act);
@@ -1225,7 +1250,7 @@ export function chooseOption(state, idx) {
     const q = (mission.questions || []).find(q => q.id === pc.questionId);
     const r = q && q.replies[idx];
     if (!r) return { ok: false, reason: 'Réponse invalide' };
-    log(state, 'player', r.line || r.label);
+    log(state, 'player', r.line || r.label, { q: q.id });
     state.pendingChoice = null;
     if (r.answer) log(state, 'taker', r.answer);
     const eff = questionEffects(state, r);
@@ -1299,6 +1324,7 @@ export function assaultOdds(state, entryId = null) {
 }
 
 export function resolveAssault(state, kind = 'volontaire', entryId = null) {
+  state.flags.assaultKind = kind;
   const { entry, risk } = assaultOdds(state, entryId);
   if (entry.needsPlan && !state.planKnown) {
     return { ok: false, reason: `Entrée « ${entry.name} » : plan des lieux requis (Renseignement)` };
@@ -1330,6 +1356,7 @@ export function resolveAssault(state, kind = 'volontaire', entryId = null) {
 function endGame(state, outcome) {
   if (state.result) return;
   state.phase = 'over';
+  pushHistory(state);
   state.result = {
     outcome, // 'surrender' | 'liberation' | 'assault' | 'escape' | 'defeat'
     turn: state.turn,

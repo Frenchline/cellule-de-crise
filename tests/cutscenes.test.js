@@ -35,11 +35,16 @@ test('frame 0 et frame 3 diffèrent pour chaque art (au moins un élément anim�
   }
 });
 
-// ---------- seules les 3 missions classiques ont des cinématiques ----------
-test('seules tutoriel/braquage/hopital ont des cinématiques', () => {
-  assert.deepEqual(Object.keys(CUTSCENES).sort(), ['braquage', 'hopital', 'tutoriel']);
-  assert.ok(getIntro('tutoriel'));
-  assert.equal(getIntro('ferry'), null);
+// ---------- les 6 missions écrites ont des cinématiques ----------
+test('les 6 missions écrites ont une intro (3 panneaux) et des mids', () => {
+  assert.deepEqual(Object.keys(CUTSCENES).sort(),
+    ['braquage', 'ferry', 'hopital', 'prison', 'secte', 'tutoriel']);
+  for (const id of Object.keys(CUTSCENES)) {
+    const def = CUTSCENES[id];
+    assert.equal(def.intro.length, 3, `intro ${id}`);
+    assert.ok(def.mid.length >= 3, `mid ${id}`);
+  }
+  assert.equal(getIntro('gen:42'), null);
 });
 
 // ---------- pickCutscene ----------
@@ -88,6 +93,45 @@ test('pickCutscene : déclencheurs freed et death', () => {
 test('pickCutscene : pressureGte', () => {
   const g = mkGame('braquage', { turn: 1, threat: 2, pressure: 6 });
   assert.equal(pickCutscene(g, [])?.key, 'media');
+});
+
+// ---------- triggers avancés : counterGte / act / actTurn ----------
+test('pickCutscene : counterGte lit les compteurs du scénario', () => {
+  const g = mkGame('secte', { turn: 2 });
+  g.counters.rituel.value = 2;
+  assert.equal(pickCutscene(g, []), null);            // seuil 3 non atteint
+  g.counters.rituel.value = 3;
+  assert.equal(pickCutscene(g, [])?.key, 'rituel');
+  const gp = mkGame('prison', { turn: 2 });
+  gp.counters.emeute.value = 4;
+  assert.equal(pickCutscene(gp, [])?.key, 'toit');
+  const gf = mkGame('ferry', { turn: 2 });
+  gf.counters.explosifs.value = 2;
+  assert.equal(pickCutscene(gf, [])?.key, 'explosifs');
+});
+
+test('pickCutscene : act + actTurn (premier tour de l\'acte)', () => {
+  const g = mkGame('secte', { turn: 12 });
+  g.counters.rituel.value = 3; // 'rituel' primerait : on l'écarte
+  const seen = ['rituel'];
+  g.act = 1; g.actStartTurn = 12;
+  assert.equal(pickCutscene(g, seen)?.key, 'aube');      // act 1, actTurn 1
+  g.turn = 13;
+  assert.notEqual(pickCutscene(g, seen)?.key, 'aube');   // plus le 1er tour
+  // acte 3 de prison : fumée au premier tour de l'acte
+  const gp = mkGame('prison', { turn: 20 });
+  gp.act = 2; gp.actStartTurn = 20;
+  assert.equal(pickCutscene(gp, [])?.key, 'fumee');
+  gp.act = 1;
+  assert.notEqual(pickCutscene(gp, [])?.key, 'fumee');   // mauvais acte
+});
+
+test('pickCutscene : conditions ET combinées (act + actTurn)', () => {
+  const g = mkGame('ferry', { turn: 15 });
+  g.act = 1; g.actStartTurn = 10;      // bon acte, mauvais tour d'acte
+  assert.notEqual(pickCutscene(g, [])?.key, 'houle');
+  g.act = 2; g.actStartTurn = 15;      // mauvais acte, bon actTurn
+  assert.notEqual(pickCutscene(g, [])?.key, 'houle');
 });
 
 

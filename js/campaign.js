@@ -1,6 +1,7 @@
 // ============================================================
 // Campagne — persistance localStorage (versionné, mockable)
 // ============================================================
+import { REP_DEFAULT, repDeltas, repReport } from './reputation.js';
 
 export const RANKS = [
   { name: 'Stagiaire', xp: 0 },
@@ -34,6 +35,8 @@ export function defaultCampaign() {
     stress: 0,
     day: 1,
     missions: {}, // id -> {plays, wins, bestScore, bestGrade, finished}
+    rep: { ...REP_DEFAULT },     // réputation : presse / hierarchie (0–10)
+    repLast: null,               // dernières répliques { presse, hierarchie }
     settings: { ...DEFAULT_SETTINGS },
   };
 }
@@ -43,7 +46,10 @@ export function loadCampaign() {
   if (!raw) return null;
   try {
     const c = JSON.parse(raw);
-    return c && c.version === 1 ? c : null;
+    if (!c || c.version !== 1) return null;
+    // migration : jauges de réputation ajoutées en v9
+    c.rep = { ...REP_DEFAULT, ...(c.rep || {}) };
+    return c;
   } catch { return null; }
 }
 
@@ -124,6 +130,18 @@ export function recordResult(c, missionId, outcome, scoreInfo, hostages, options
   }
 
   return { rankUps, win, stress: c.stress };
+}
+
+// Applique les deltas de réputation après une mission (sauf tutoriel).
+// Retourne le rapport {presse, hierarchie, psy} pour le débrief, ou null.
+export function applyReputation(c, missionId, game) {
+  if (missionId === 'tutoriel' || !game || !game.result) return null;
+  c.rep = { ...REP_DEFAULT, ...(c.rep || {}) };
+  const report = repReport(c.rep, repDeltas(game.result.outcome, game), game, c.stress);
+  c.rep.presse = report.presse.after;
+  c.rep.hierarchie = report.hierarchie.after;
+  c.repLast = { presse: report.presse.line, hierarchie: report.hierarchie.line };
+  return report;
 }
 
 export function restDay(c) {

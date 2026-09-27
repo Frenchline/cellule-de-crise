@@ -866,3 +866,59 @@ body[data-tt="7"] #hand, body[data-tt="7"] #game-tabs {
 .d-hostages .dh { font-family: var(--mono); font-size: 11px; padding: 2px 0; }
 .d-hostages .host-dead { color: var(--red, #e23b3b); }
 .d-hostages .host-freed { color: var(--green, #4fbf67); }
+
+/* ---------- Relations (réputation QG + débrief) ---------- */
+.rel-row, .d-react {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 0; border-bottom: 1px dotted #2a3342;
+}
+.rel-av { flex-shrink: 0; image-rendering: pixelated; width: 64px; height: 64px; }
+.rel-body { flex: 1; min-width: 0; }
+.rel-head { display: flex; align-items: baseline; gap: 8px; }
+.rel-head b { font-size: 12.5px; color: var(--ink, #e8e0cd); }
+.rel-role { font-size: 10px; color: var(--dim); }
+.rel-bar { display: flex; gap: 2px; align-items: center; margin: 4px 0; }
+.rel-cell { width: 10px; height: 8px; background: #1b2635; border: 1px solid #2c3749; }
+.rel-cell.on { background: var(--amber); border-color: var(--amber); }
+.rel-val { font-family: var(--mono); font-size: 10px; color: var(--amber); margin-left: 6px; }
+.rel-note { font-size: 11.5px; color: var(--dim); font-style: italic; line-height: 1.4; }
+.rel-mod { font-family: var(--mono); font-size: 10px; color: var(--amber); margin-top: 4px; }
+.rel-delta { font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 3px; }
+.rel-delta.up { color: var(--green, #4fbf67); }
+.rel-delta.down { color: var(--red, #e23b3b); }
+
+/* débrief : RÉACTIONS / DÉROULÉ sur le papier clair */
+.d-reactions, .d-deroule {
+  margin: 12px 0; padding: 10px 12px; border: 1px solid #a89878;
+  background: rgba(255,255,255,.25); border-radius: 3px;
+}
+.d-reactions h4, .d-deroule h4 {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+  color: #7a2a2a; margin: 0 0 8px; border-bottom: 1px solid #a89878; padding-bottom: 5px;
+}
+.d-react { border-bottom-color: #c8b898; }
+.d-react .rel-head b { color: #2a2015; }
+.d-react .rel-role { color: #6a5a30; }
+.d-react .rel-note { color: #4a3f2c; }
+.d-timeline {
+  display: block; width: 100%; height: 118px;
+  border: 1px solid #2c3749; border-radius: 3px;
+  image-rendering: pixelated; background: #0e1520;
+}
+.d-moments { margin-top: 8px; }
+.d-moments .dm {
+  font-family: var(--mono); font-size: 10.5px; color: #4a3f2c;
+  padding: 1.5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* briefing : encart Contexte (réputation) */
+.ctx-box {
+  margin: 10px 0; padding: 8px 10px;
+  border: 1px solid #a89878; border-left: 3px solid var(--amber);
+  background: rgba(138,106,74,.12); border-radius: 3px;
+}
+.ctx-title {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .22em;
+  color: #7a2a2a; margin-bottom: 5px;
+}
+.ctx-line { font-size: 12px; color: #4a3f2c; padding: 2px 0; line-height: 1.4; }

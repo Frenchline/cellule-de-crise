@@ -644,7 +644,7 @@ function refreshBriefing() {
   UI.renderBriefing(mission, optsSel, (id) => {
     optsSel[id] = !optsSel[id];
     refreshBriefing();
-  });
+  }, campaign.rep);
   $('#btn-brief-intro').hidden = !(illusOn() && getIntro(pendingMission));
   $('#btn-brief-reroll').hidden = !(pendingMission && pendingMission.startsWith('gen:'));
 }
@@ -658,6 +658,7 @@ function launchMission() {
     options: optsSel,
     agentName: campaign.agentName,
     stress: campaign.stress,
+    rep: campaign.rep,
   });
   logCursor = 0;
   moodEvent = null; moodHold = 0; resultVigShown = false;
@@ -692,9 +693,10 @@ function showDebrief() {
   const outcome = game.result.outcome;
   const { rankUps } = CAM.recordResult(campaign, game.missionId, outcome, scoreInfo, game.hostages, game.options);
   CAM.recordDaily(campaign, game.missionId, outcome, scoreInfo, game.hostages);
+  const repReport = CAM.applyReputation(campaign, game.missionId, game);
   if (saveEnabled) { CAM.saveCampaign(campaign); CAM.clearGame(); }
   const rank = CAM.getRank(campaign.xp);
-  UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn());
+  UI.renderDebrief(game, mission, scoreInfo, scoreInfo.xp, rank.rank.name, rankUps, illusOn(), repReport);
   UI.showScreen('scr-debrief');
   AU.setAmbience('menu');
   AU.playJingle(outcome !== 'defeat');
@@ -874,9 +876,19 @@ if ('serviceWorker' in navigator) {
   const h = location.hash.slice(1);
   if (h.startsWith('auto:') && location.search.includes('debug')) {
     saveEnabled = false;
-    const mode = h.slice(5);
+    let mode = h.slice(5);
     campaign = CAM.defaultCampaign();
     campaign.agentName = 'Doc';
+    // préfixe « rep:<p>:<h>:… » : fixe les jauges de réputation puis enchaîne le mode
+    if (mode.startsWith('rep:')) {
+      const parts = mode.slice(4).split(':');
+      campaign.rep = { presse: Math.max(0, Math.min(10, +parts[0] || 5)), hierarchie: Math.max(0, Math.min(10, +parts[1] || 5)) };
+      campaign.repLast = {
+        hierarchie: 'Le rapport est bouclé. Rentrez dormir, demain sera un autre jour.',
+        presse: 'J\'ai assez pour un papier de vingt lignes. Ni plus, ni moins.',
+      };
+      mode = parts.slice(2).join(':');
+    }
     // découpe "<missionId>[:p1[:p2]]" en tenant compte des ids « gen:<seed> »
     const splitId = (rest, nParams) => {
       const parts = rest.split(':');
@@ -1062,19 +1074,31 @@ if ('serviceWorker' in navigator) {
       return;
     }
     if (mode.startsWith('debrief:')) {
-      pendingMission = mode.slice(8); launchMission();
+      pendingMission = splitId(mode.slice(8), 0)[0]; launchMission();
+      // quelques tours joués pour peupler l'historique et les moments clés
+      for (let i = 0; i < 8 && !game.result; i++) {
+        if (game.pendingChoice) { E.chooseOption(game, 0); continue; }
+        if (game.phase === 'conversation') {
+          const cid = game.hand.find(id => E.canPlayCard(game, id).ok);
+          if (cid) E.playCard(game, cid, null); else E.endPhase(game);
+        } else E.endPhase(game);
+      }
       // force une fin pour la capture : quelques libérés, une mort, reddition
-      const hl = E.ensureHostageList(game);
-      const nFree = Math.min(3, Math.max(0, game.hostages.total - 2));
-      const nDead = game.hostages.total > 4 ? 1 : 0;
-      game.hostages.freed = nFree; game.hostages.killed = nDead;
-      game.hostages.remaining = game.hostages.total - nFree - nDead;
-      hl.forEach((h, i) => {
-        if (i < nFree) { h.status = 'freed'; h.turn = i + 2; }
-        else if (i < nFree + nDead) { h.status = 'dead'; h.turn = 5; h.cause = 'Point de rupture'; }
-      });
-      game.result = { outcome: 'surrender', turn: game.turn, hostages: { ...game.hostages } };
-      game.log.push({ k: 'epilogue', text: getMission(game.missionId).epilogues.surrender });
+      if (!game.result) {
+        const hl = E.ensureHostageList(game);
+        const held = hl.filter(x => x.status === 'held');
+        const nFree = Math.min(3, Math.max(0, game.hostages.remaining - 1));
+        const nDead = game.hostages.killed === 0 && game.hostages.remaining - nFree > 1 ? 1 : 0;
+        for (let i = 0; i < nFree && i < held.length; i++) { held[i].status = 'freed'; held[i].turn = i + 2; }
+        for (let i = 0; i < nDead && nFree + i < held.length; i++) {
+          held[nFree + i].status = 'dead'; held[nFree + i].turn = 5; held[nFree + i].cause = 'Point de rupture';
+        }
+        game.hostages.freed = hl.filter(x => x.status === 'freed').length;
+        game.hostages.killed = hl.filter(x => x.status === 'dead').length;
+        game.hostages.remaining = hl.filter(x => x.status === 'held').length;
+        game.result = { outcome: 'surrender', turn: game.turn, hostages: { ...game.hostages } };
+        game.log.push({ k: 'epilogue', text: getMission(game.missionId).epilogues.surrender, turn: game.turn });
+      }
       showDebrief();
       return;
     }

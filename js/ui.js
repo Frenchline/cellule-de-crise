@@ -12,6 +12,7 @@ import {
   cardOdds, failRisk, ensureHostageList, assaultOdds,
 } from './engine.js';
 import { getRank, RANKS, missionUnlocked, dailyMissionId, dailySeed } from './campaign.js';
+import { REP_CHARS, repModifiers } from './reputation.js';
 import * as PIX from './pixel.js';
 import * as PLANS from './pixelplan.js';
 import { getPlan, sceneBase } from './data/plans.js';
@@ -715,6 +716,41 @@ export function renderHQ(c, missionList, handlers) {
     opsTitle.classList.add('hidden');
   }
 
+  // ---------- Relations (réputation) ----------
+  const relBox = $('#hq-relations');
+  if (relBox) {
+    relBox.innerHTML = '';
+    const rep = { presse: 5, hierarchie: 5, ...(c.rep || {}) };
+    const ctxs = repModifiers(rep).contexts;
+    for (const gauge of ['hierarchie', 'presse']) {
+      const ch = REP_CHARS[gauge];
+      const row = el('div', 'rel-row');
+      const av = PIX.spriteCanvas(PIX.portraitSprite(ch.portrait, 'calme'), 2);
+      av.className = 'rel-av';
+      row.append(av);
+      const body = el('div', 'rel-body');
+      const head = el('div', 'rel-head');
+      head.append(el('b', null, ch.name), el('span', 'rel-role', ch.role));
+      body.append(head);
+      // jauge 0–10 en blocs
+      const bar = el('div', 'rel-bar');
+      for (let i = 1; i <= 10; i++) {
+        bar.append(el('i', `rel-cell${i <= rep[gauge] ? ' on' : ''}`));
+      }
+      bar.append(el('span', 'rel-val', `${rep[gauge]}/10`));
+      body.append(bar);
+      const note = (c.repLast && c.repLast[gauge])
+        ? `« ${c.repLast[gauge]} »`
+        : 'aucune remarque récente';
+      body.append(el('div', 'rel-note', note));
+      const mod = ctxs.find(x => x.who === ch.id);
+      if (mod) body.append(el('div', 'rel-mod', `▸ ${mod.label} : ${mod.text}`));
+      row.append(body);
+      relBox.append(row);
+    }
+    if (!ctxs.length) relBox.append(el('div', 'rel-note', 'Réputation neutre : aucun modificateur en mission.'));
+  }
+
   const sk = $('#hq-skills');
   sk.innerHTML = '';
   $('#hq-skillpoints').textContent = c.skillPoints ? `(${c.skillPoints} point${c.skillPoints > 1 ? 's' : ''} à dépenser)` : '';
@@ -732,13 +768,25 @@ export function renderHQ(c, missionList, handlers) {
 }
 
 // ---------------- briefing ----------------
-export function renderBriefing(mission, optsSel, onToggle) {
+export function renderBriefing(mission, optsSel, onToggle, rep = null) {
   const paper = $('#brief-paper');
   paper.innerHTML = '';
   if (mission.type === 'advanced') {
     paper.append(el('div', 'adv-tag', `▲ SCÉNARIO AVANCÉ — ${mission.acts ? mission.acts.length + ' actes' : ''} · ${mission.duration || ''}`));
   }
   for (const p of mission.briefing) paper.append(el('p', null, p));
+
+  // Encart « Contexte » : effets actifs de la réputation
+  const ctxs = rep ? repModifiers(rep).contexts : [];
+  if (ctxs.length) {
+    const box = el('div', 'ctx-box');
+    box.append(el('div', 'ctx-title', 'CONTEXTE'));
+    for (const c of ctxs) {
+      const ch = Object.values(REP_CHARS).find(x => x.id === c.who);
+      box.append(el('div', 'ctx-line', `▸ ${c.label}${ch ? ` (${ch.name})` : ''} — ${c.text}`));
+    }
+    paper.append(box);
+  }
 
   const box = $('#brief-options');
   box.innerHTML = '';
@@ -761,7 +809,83 @@ const OUTCOME_VIGNETTE = {
   escape: 'terror', defeat: 'death',
 };
 
-export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankUps = 0, illus = true) {
+// Moments clés de la partie, extraits du journal (pur).
+// Priorité 1 = morts/libérations/assaut, 2 = actes/concessions, 3 = terreur/indices/questions.
+export function keyMoments(log) {
+  const found = [];
+  (log || []).forEach((e, i) => {
+    const t = e.turn ?? 1, x = e.text || '';
+    let m = null;
+    if (e.k === 'act' && /ACTE [IVX]+/.test(x)) m = { i, turn: t, icon: '§', label: x.replace(/═/g, '').trim(), pr: 2 };
+    else if (e.k === 'death') m = { i, turn: t, icon: '✝', label: x.replace(/^✝\s*/, ''), pr: 1 };
+    else if (x.startsWith('🚪')) m = { i, turn: t, icon: '🚪', label: x.replace(/^🚪\s*/, ''), pr: 1 };
+    else if (x.startsWith('◆ ASSAUT')) m = { i, turn: t, icon: '⚔', label: `Assaut : ${x.replace(/^◆ ASSAUT —\s*/, '')}`, pr: 1 };
+    else if (x.startsWith('Concession')) m = { i, turn: t, icon: '⚑', label: x, pr: 2 };
+    else if (x.startsWith('◆ TERREUR')) m = { i, turn: t, icon: '◆', label: x.replace(/^◆ TERREUR —\s*/, ''), pr: 3 };
+    else if (e.k === 'clue') m = { i, turn: t, icon: '🔍', label: x.replace(/^📁 Indice révélé : «\s*/, '').replace(/\s*»$/, ''), pr: 3 };
+    else if (e.k === 'player' && e.data && e.data.q) m = { i, turn: t, icon: '❓', label: `Question : ${x}`, pr: 3 };
+    if (m) found.push(m);
+  });
+  return found
+    .sort((a, b) => a.pr - b.pr || a.i - b.i)
+    .slice(0, 12)
+    .sort((a, b) => a.i - b.i);
+}
+
+// Graphe « DÉROULÉ » : menace (rouge, 1–7) et pression (ambre, 0–10)
+// par tour, marqueurs d'actes en pointillés, icônes d'événements en bas.
+export function drawTimeline(canvas, state) {
+  const hist = state.history || [];
+  const w = canvas.width = Math.max(220, Math.floor(canvas.clientWidth) || 320);
+  const h = canvas.height = 118;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const padL = 20, padR = 6, padT = 10, padB = 20;
+  const iw = w - padL - padR, ih = h - padT - padB;
+  const tMax = Math.max(2, ...hist.map(p => p.turn));
+  const X = t => padL + (iw * (t - 1)) / (tMax - 1 || 1);
+  const Yt = v => padT + (ih * (7 - Math.min(7, Math.max(1, v)))) / 6;
+  const Yp = v => padT + (ih * (10 - Math.min(10, Math.max(0, v)))) / 10;
+  ctx.fillStyle = '#0e1520'; ctx.fillRect(0, 0, w, h);
+  // grille horizontale (échelle menace 1–7)
+  ctx.strokeStyle = '#1b2635'; ctx.fillStyle = '#8b8fa0'; ctx.font = '8px monospace';
+  for (const t of [1, 4, 7]) {
+    ctx.beginPath(); ctx.moveTo(padL, Yt(t)); ctx.lineTo(w - padR, Yt(t)); ctx.stroke();
+    ctx.fillText(String(t), 4, Yt(t) + 3);
+  }
+  // marqueurs de changement d'acte (pointillés)
+  ctx.strokeStyle = '#8a6a4a'; ctx.setLineDash([2, 3]);
+  for (const e of state.log || []) {
+    if (e.k === 'act' && /ACTE [IVX]+/.test(e.text || '') && e.turn > 1) {
+      ctx.beginPath(); ctx.moveTo(X(e.turn), padT); ctx.lineTo(X(e.turn), padT + ih); ctx.stroke();
+    }
+  }
+  ctx.setLineDash([]);
+  const line = (Y, color) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+    hist.forEach((p, i) => { const x = X(p.turn), y = Y(p); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke(); ctx.lineWidth = 1;
+    for (const p of hist) { ctx.fillStyle = color; ctx.fillRect(X(p.turn) - 1, Y(p) - 1, 3, 3); }
+  };
+  line(p => Yt(p.threat), '#e23b3b');
+  line(p => Yp(p.pressure), '#ffb454');
+  // légende
+  ctx.fillStyle = '#e23b3b'; ctx.fillRect(padL, h - 16, 8, 2);
+  ctx.fillStyle = '#b3ac98'; ctx.fillText('menace', padL + 11, h - 12);
+  ctx.fillStyle = '#ffb454'; ctx.fillRect(padL + 52, h - 16, 8, 2);
+  ctx.fillStyle = '#b3ac98'; ctx.fillText('presse', padL + 63, h - 12);
+  // icônes d'événements le long du bas (une par type par tour)
+  ctx.font = '9px monospace';
+  const seenTurnIcon = new Set();
+  for (const m of keyMoments(state.log)) {
+    const k = `${m.turn}:${m.icon}`;
+    if (seenTurnIcon.has(k)) continue;
+    seenTurnIcon.add(k);
+    ctx.fillText(m.icon, X(m.turn) - 4, h - 1);
+  }
+}
+
+export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankUps = 0, illus = true, repReport = null) {
   const paper = $('#debrief-paper');
   paper.innerHTML = '';
   if (illus) {
@@ -832,6 +956,60 @@ export function renderDebrief(state, mission, scoreInfo, xpGain, rankName, rankU
     paper.append(el('div', 'd-promo',
       `★ PROMOTION : ${rankName} — ${rankUps} point${rankUps > 1 ? 's' : ''} de compétence à dépenser au QG`));
   }
+
+  // ---- DÉROULÉ (graphe + moments clés) ----
+  const hist = state.history || [];
+  if (hist.length > 1) {
+    const der = el('div', 'd-deroule');
+    der.append(el('h4', null, 'DÉROULÉ'));
+    const cv = el('canvas', 'd-timeline');
+    der.append(cv);
+    const moms = keyMoments(state.log);
+    if (moms.length) {
+      const ul = el('div', 'd-moments');
+      for (const m of moms) ul.append(el('div', 'dm', `T${m.turn} · ${m.icon} ${m.label}`));
+      der.append(ul);
+    }
+    paper.append(der);
+    drawTimeline(cv, state);
+  }
+
+  // ---- RÉACTIONS (réputation + psy) ----
+  if (repReport) {
+    const rr = el('div', 'd-reactions');
+    rr.append(el('h4', null, 'RÉACTIONS'));
+    for (const g of ['hierarchie', 'presse']) {
+      const ch = repReport[g];
+      const row = el('div', 'd-react');
+      const av = PIX.spriteCanvas(PIX.portraitSprite(ch.portrait, 'calme'), 2);
+      av.className = 'rel-av';
+      row.append(av);
+      const body = el('div', 'rel-body');
+      const head = el('div', 'rel-head');
+      head.append(el('b', null, ch.name), el('span', 'rel-role', ch.role));
+      body.append(head);
+      body.append(el('div', 'rel-note', `« ${ch.line} »`));
+      const arrow = ch.delta > 0 ? '▲' : ch.delta < 0 ? '▼' : '=';
+      const gname = g === 'presse' ? 'PRESSE' : 'HIÉRARCHIE';
+      body.append(el('div', `rel-delta ${ch.delta > 0 ? 'up' : ch.delta < 0 ? 'down' : ''}`,
+        `${gname} ${ch.before} → ${ch.after} ${arrow}`));
+      row.append(body);
+      rr.append(row);
+    }
+    // la psy commente toujours
+    const prow = el('div', 'd-react');
+    const pav = PIX.spriteCanvas(PIX.portraitSprite(PIX.PSY_PORTRAIT, 'calme'), 2);
+    pav.className = 'rel-av';
+    prow.append(pav);
+    const pb = el('div', 'rel-body');
+    const ph = el('div', 'rel-head');
+    ph.append(el('b', null, repReport.psy.name), el('span', 'rel-role', repReport.psy.role));
+    pb.append(ph, el('div', 'rel-note', `« ${repReport.psy.line} »`));
+    prow.append(pb);
+    rr.append(prow);
+    paper.append(rr);
+  }
+
   const epi = state.log.filter(e => e.k === 'epilogue').map(e => e.text).join(' ');
   if (epi) paper.append(el('p', 'd-epi', epi));
   paper.append(el('div', 'd-stamp', 'BRIGADE DE NÉGOCIATION — ARCHIVE CELLULE'));
@@ -872,7 +1050,7 @@ export function openCardModal(state, cardId, handlers) {
   };
   if (risk) box.append(el('div', 'm-risk', risk === 'kill'
     ? '⚠ Échec : la menace peut atteindre 7 — un otage peut mourir'
-    : '⚠ Échec : la presse peut atteindre 10 — assaut forcé'));
+    : `⚠ Échec : la presse peut atteindre ${state.assaultAt || 10} — assaut forcé`));
   if (!chk.ok) box.append(el('div', 'm-cond', `✖ ${chk.reason}`));
   else if (card.condText) box.append(el('div', 'm-cond', `Condition : ${card.condText}`));
 
@@ -1034,7 +1212,7 @@ export const RULES = [
     id: 'sec-pression', title: 'Pression médiatique',
     body: [
       'La presse monte d\'elle-même chaque fin de tour (et plus vite avec certaines actions ou l\'option Médias déchaînés).',
-      'À <b>9</b> : le préfet prévient. À <b>10</b> : <b>l\'assaut est ordonné de force</b> à la fin du tour — quoi que vous fassiez.',
+      'À <b>9</b> : le préfet prévient. À <b>10</b> : <b>l\'assaut est ordonné de force</b> à la fin du tour — quoi que vous fassiez (seuil 9 si votre hiérarchie vous lâche — voir Réputation).',
       '« Gagner du temps » et « Mentir sur les délais » peuvent baisser la presse ou annuler la prochaine carte Terreur.',
     ],
   },
@@ -1073,6 +1251,16 @@ export const RULES = [
       '<b>COMPTEURS</b> (Rituel, Émeute, Explosifs…) : quand un compteur atteint son maximum, son effet critique se déclenche puis il redescend. Des cartes et actions d\'équipe permettent de le faire baisser.',
       'La reddition n\'est possible qu\'au <b>dernier acte</b> : les premiers interlocuteurs n\'ont pas le pouvoir de se rendre.',
       'La mort du dernier otage restant y est toujours une défaite, même si d\'autres ont été libérés.',
+    ],
+  },
+  {
+    id: 'sec-reputation', title: 'Réputation',
+    body: [
+      'Deux jauges de <b>réputation</b> (0–10, départ à 5) suivent votre campagne : la <b>presse</b> (Inès Morvan, journaliste) et votre <b>hiérarchie</b> (le commissaire Castagne). Elles montent ou descendent après chaque mission — sauf le tutoriel.',
+      '<b>Presse</b> : monte quand la pression reste basse ou que vous obtenez une reddition ; chute si la pression explose, si un otage meurt ou si vous cédez une demande majeure.',
+      '<b>Hiérarchie</b> : monte sur une reddition, une libération sans mort ou un assaut volontaire propre ; chute sur défaite, fuite ou concessions majeures.',
+      'Effets au briefing (« Contexte ») : presse ≥ 8 → la presse vous ménage (2 montées automatiques sautées) ; presse ≤ 2 → pression de départ +2 ; hiérarchie ≥ 8 → préparation +1 ; hiérarchie ≤ 2 → l\'assaut forcé tombe à pression 9.',
+      'Le débrief montre leurs <b>réactions</b> et un graphe du <b>déroulé</b> : menace et pression tour par tour.',
     ],
   },
   {

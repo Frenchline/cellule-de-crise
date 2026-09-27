@@ -459,6 +459,441 @@ const ARTS = {
     vl(g, 96, 64, 12, 'O');                        // pied du cadre posé au sol
     rect(g, 92, 74, 34, 4, 'O');                   // petit tabouret/sol support
   },
+
+  // ---------- SECTE : ferme du Vercors ----------
+
+  // plateau enneigé de nuit, ferme éclairée à la bougie
+  vercors_neige(g, f) {
+    rect(g, 0, 0, W, 62, 'N');
+    rect(g, 0, 50, 56, 12, 'n'); rect(g, 96, 46, 64, 16, 'n');  // crêtes
+    rect(g, 0, 62, W, 58, 'c'); rect(g, 0, 62, W, 3, 'w');      // neige
+    // ferme
+    rect(g, 58, 34, 52, 28, 'n'); rect(g, 58, 34, 52, 2, 'k');
+    rect(g, 54, 26, 60, 8, 'k'); rect(g, 54, 26, 60, 3, 'w');   // toit neigeux
+    // fenêtres aux bougies (scintillement)
+    const fl = f % 2;
+    fenetre(g, 64, 44, 8, 10, fl ? 'a' : 'y');
+    fenetre(g, 80, 44, 8, 10, fl ? 'y' : 'a');
+    fenetre(g, 96, 44, 8, 10, fl ? 'a' : 'y');
+    rect(g, 72, 58, 24, 4, 'k');                                 // soubassement
+    // sapins lourds de neige
+    for (const [tx, ty] of [[24, 52], [132, 50]]) {
+      rect(g, tx, ty, 12, 4, 'w'); rect(g, tx + 2, ty + 4, 8, 4, 'V');
+      rect(g, tx + 4, ty + 8, 4, 4, 'V'); vl(g, tx + 5, ty + 12, 10, 'O');
+    }
+    // neige qui tombe
+    for (let i = 0; i < 42; i++) px(g, (i * 37 + f * 5) % W, (i * 23 + f * 9) % 58, 'w');
+  },
+
+  // le gourou parle devant un cercle d'adeptes à la bougie
+  guru_foule(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // estrade
+    rect(g, 66, 56, 28, 6, 'O');
+    // la silhouette du gourou, bras levés
+    rect(g, 76, 30, 8, 8, 's');
+    rect(g, 72, 38, 16, 20, 'o');                                // robe
+    vl(g, 70, 34, 10 + (f % 2), 's'); vl(g, 88, 34, 10 + (f % 2), 's'); // bras qui se lèvent
+    // cercle d'adeptes — têtes penchées en arc
+    for (let i = 0; i < 7; i++) {
+      const x = 26 + i * 18, y = 78 + Math.abs(i - 3) * 4;
+      rect(g, x, y, 7, 6, 's'); rect(g, x - 1, y + 6, 9, 12, 'U');
+    }
+    // bougies en premier plan, flammes animées
+    for (let i = 0; i < 6; i++) {
+      const x = 14 + i * 26;
+      vl(g, x, 100, 10, 'w');
+      px(g, x, 98 + (i + f) % 2, 'y'); px(g, x, 99, 'a');
+    }
+    // halo de bougies
+    for (let i = 0; i < 6; i++) px(g, 14 + i * 26, 96, 'a');
+  },
+
+  // dessin d'enfant au mur du dortoir
+  dortoir_enfants(g, f) {
+    rect(g, 0, 0, W, H, 'n');
+    rect(g, 0, 96, W, 24, 'U'); hl(g, 0, 96, W, 'k');
+    // fenêtre grillagée, dehors la nuit et la neige
+    rect(g, 12, 14, 40, 44, 'N'); rect(g, 12, 14, 40, 44, 'g');
+    rect(g, 14, 16, 36, 40, 'N');
+    for (let i = 1; i < 4; i++) vl(g, 14 + i * 9, 16, 40, 'k');
+    hl(g, 14, 36, 36, 'k');
+    for (let i = 0; i < 10; i++) px(g, 16 + (i * 13 + f * 3) % 34, 18 + (i * 7 + f * 5) % 36, 'w'); // neige dehors
+    // dessin d'enfant : soleil, maison, phrase au crayon
+    rect(g, 78, 20, 60, 56, 'w'); rect(g, 78, 20, 60, 3, 'c'); rect(g, 78, 20, 3, 56, 'c');
+    px(g, 108, 34, 'y'); hl(g, 106, 32, 5, 'y'); px(g, 106, 34, 'y'); px(g, 110, 34, 'y'); // soleil
+    vl(g, 104, 28, 3, f % 2 ? 'y' : '.'); vl(g, 112, 28, 3, 'y');                          // rayons
+    rect(g, 88, 52, 16, 14, 'o'); rect(g, 88, 48, 16, 5, 'r'); rect(g, 93, 58, 5, 8, 'k'); // maison
+    hl(g, 90, 70, 40, 'k'); hl(g, 90, 72, 30, 'k');                                        // phrase griffonnée
+    // petit lit de camp en bas
+    rect(g, 60, 88, 56, 8, 'u'); rect(g, 60, 84, 12, 5, 'w'); vl(g, 62, 96, 8, 'k'); vl(g, 112, 96, 8, 'k');
+  },
+
+  // rituel : coupes remplies sous les bougies
+  rituel_coupes(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // grande table
+    rect(g, 20, 62, 120, 8, 'O'); rect(g, 20, 70, 120, 50, 'n');
+    // coupes — la dernière se remplit (niveau animé)
+    for (let i = 0; i < 5; i++) {
+      const x = 32 + i * 24, lvl = i < 4 ? 4 : (f % 4);
+      rect(g, x, 56, 10, 6, 'k');
+      if (lvl) rect(g, x + 2, 56 + 4 - lvl, 6, lvl, 'a');
+    }
+    // chandeliers, flammes
+    for (const [cx, cy] of [[26, 40], [134, 40], [80, 30]]) {
+      vl(g, cx, cy, 20, 'w'); rect(g, cx - 2, cy + 20, 5, 3, 'g');
+      px(g, cx, cy - 2 - (f % 2), 'y'); px(g, cx, cy - 1, 'a');
+    }
+    // cercle de silhouettes derrière la table
+    for (let i = 0; i < 6; i++) {
+      const x = 30 + i * 20;
+      rect(g, x, 12 + (i % 2) * 3, 6, 6, 's'); rect(g, x - 1, 18 + (i % 2) * 3, 8, 20, 'U');
+    }
+  },
+
+  // aube qui se lève sur la ferme (Élie décroche)
+  aube_elie(g, f) {
+    // ciel d'aube qui s'éclaircit avec le frame
+    const band = f % 4;
+    rect(g, 0, 0, W, 14 + band * 2, 'N');
+    rect(g, 0, 14 + band * 2, W, 30, 'n');
+    rect(g, 0, 44 + band * 2, W, 20, 't');                        // lueur basse
+    // disque de soleil qui pointe
+    rect(g, 118, 52 - band * 3, 16, 10, 'a'); rect(g, 121, 50 - band * 3, 10, 4, 'y');
+    rect(g, 0, 66, W, 54, 'c');                                    // neige grise d'aube
+    // ferme en contre-jour
+    rect(g, 40, 44, 46, 24, 'N'); rect(g, 36, 38, 54, 7, 'k');
+    rect(g, 66, 50, 10, 18, 'k');                                  // porte
+    // silhouette au téléphone dans l'encadrement
+    rect(g, 68, 52, 6, 6, 's'); rect(g, 67, 58, 8, 10, 'U');
+    px(g, 75, 54 + (f % 2), 'k');                                  // combiné à l'oreille
+    // poteau téléphonique + fil vers l'extérieur
+    vl(g, 130, 60, 34, 'k'); hl(g, 86, 62, 44, 'k'); px(g, 130, 60, 'r');
+  },
+
+  // dernier matin : plein soleil, ombres longues
+  dernier_matin(g, f) {
+    rect(g, 0, 0, W, 30, 'b');
+    rect(g, 0, 30, W, 34, 'e');                                    // ciel qui pâlit vers l'horizon
+    // grand soleil bas
+    rect(g, 68, 34 - (f % 2) * 2, 24, 18, 'y'); rect(g, 72, 32 - (f % 2) * 2, 16, 6, 'w');
+    rect(g, 0, 64, W, 56, 'w');                                    // neige éblouie
+    // ombres longues de la ferme et des hommes
+    rect(g, 44, 52, 40, 20, 'n'); rect(g, 40, 46, 48, 7, 'k');
+    for (let i = 0; i < 8; i++) hl(g, 84 + i * 4, 72 + i * 3, 26, 'e'); // ombre portée
+    // corbeaux / étourneaux au-dessus
+    for (let i = 0; i < 5; i++) {
+      const x = (i * 31 + f * 9) % W, y = 12 + (i * 11) % 18;
+      px(g, x, y, 'k'); px(g, x + 2, y, 'k');
+    }
+  },
+
+  // portail ouvert, enfant dans la neige
+  portail_neige(g, f) {
+    rect(g, 0, 0, W, 54, 'N');
+    rect(g, 0, 54, W, 66, 'c'); rect(g, 0, 54, W, 2, 'w');
+    // clôture et portail entrouvert
+    for (let x = 0; x < W; x += 12) vl(g, x, 40, 18, 'k');
+    hl(g, 0, 44, W, 'k'); hl(g, 0, 52, W, 'k');
+    rect(g, 70, 38, 8, 22, 'k');                                    // montant du portail
+    hl(g, 78, 42, 30, 'k'); hl(g, 78, 50, 26, 'k');                 // battant ouvert
+    // enfant qui avance, bras levés — pas animé
+    const x = 66 + (f % 2) * 2;
+    rect(g, x + 2, 70, 5, 5, 's'); rect(g, x, 75, 9, 12, 'r');      // doudoune rouge
+    vl(g, x - 1, 72, 6, 's'); vl(g, x + 9, 72, 6, 's');
+    // traces de pas derrière lui
+    for (let i = 0; i < 5; i++) px(g, x + 14 + i * 9, 86 + i * 2, 'g');
+    // gendarmes à couvert au loin (casques)
+    rect(g, 126, 62, 7, 5, 'k'); rect(g, 124, 67, 11, 10, 'u');
+    rect(g, 142, 64, 7, 5, 'k'); rect(g, 140, 69, 11, 9, 'u');
+  },
+
+  // ---------- PRISON : maison centrale ----------
+
+  // mur d'enceinte + mirador, projecteur qui balaie
+  centrale_mur(g, f) {
+    rect(g, 0, 0, W, 70, 'N');
+    // mirador
+    rect(g, 118, 16, 24, 18, 'n'); rect(g, 118, 16, 24, 3, 'k');
+    rect(g, 122, 34, 16, 40, 'k'); hl(g, 124, 40, 12, 'g'); hl(g, 124, 50, 12, 'g'); hl(g, 124, 60, 12, 'g');
+    // projecteur + faisceau balayant
+    px(g, 129, 24, 'y');
+    const sweep = 30 + (f % 4) * 18;                                // angle du faisceau
+    for (let i = 0; i < 6; i++) hl(g, 130 - (sweep - 30) - i * 2, 26 + i * 7, 4 + i * 4, f % 2 ? 'a' : 'y');
+    rect(g, sweep - 20, 68, 40, 6, 'a');                            // tache de lumière au sol
+    // grand mur
+    rect(g, 0, 70, W, 50, 'n'); rect(g, 0, 70, W, 4, 'k');
+    for (let x = 0; x < W; x += 16) vl(g, x, 74, 46, 'U');          // rainures
+    // barbelés au sommet
+    for (let x = 0; x < W; x += 6) { px(g, x, 70, 'g'); px(g, x + 3, 72, 'g'); }
+    // fenêtres grillées du bâtiment au loin
+    rect(g, 14, 30, 60, 34, 'n'); rect(g, 14, 30, 60, 3, 'k');
+    for (let i = 0; i < 4; i++) { rect(g, 20 + i * 14, 36, 8, 20, 'N'); vl(g, 23 + i * 14, 36, 20, 'k'); }
+  },
+
+  // couloir incendié, matelas qui brûlent
+  couloir_feu(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // barreaux au premier plan
+    for (let x = 8; x < W; x += 18) rect(g, x, 0, 4, H, 'k');
+    hl(g, 0, 30, W, 'k'); hl(g, 0, 60, W, 'k'); hl(g, 0, 90, W, 'k');
+    // matelas empilés en feu
+    rect(g, 54, 78, 60, 18, 'U'); rect(g, 58, 66, 50, 12, 'u');
+    // flammes animées
+    for (let i = 0; i < 9; i++) {
+      const x = 56 + i * 6, h = 10 + ((i + f) % 3) * 6;
+      vl(g, x, 66 - h, h, 'f'); px(g, x, 66 - h - 2, 'y');
+      if ((i + f) % 2 === 0) px(g, x + 1, 66 - h - 5, 'y');         // étincelles
+    }
+    // fumée qui monte
+    for (let i = 0; i < 14; i++) px(g, 40 + ((i * 17 + f * 4) % 80), 8 + (i * 9 + f * 3) % 30, 'g');
+    // lueur sur les murs
+    rect(g, 30, 84, 14, 30, 'J'); rect(g, 122, 84, 14, 30, 'J');
+  },
+
+  // gardien tenu contre une porte de cellule
+  gardien_porte(g, f) {
+    rect(g, 0, 0, W, H, 'n');
+    rect(g, 0, 100, W, 20, 'U'); hl(g, 0, 100, W, 'k');
+    // portes de cellules
+    for (let i = 0; i < 4; i++) {
+      const x = 8 + i * 40;
+      rect(g, x, 16, 30, 84, 'N'); rect(g, x, 16, 30, 3, 'k');
+      for (let bx = 4; bx < 28; bx += 8) vl(g, x + bx, 19, 81, 'k');
+      rect(g, x + 22, 58, 6, 4, 'g');                               // guichet
+    }
+    // détenu en orange tenant le gardien par l'épaule
+    rect(g, 88, 40, 8, 8, 's'); rect(g, 86, 48, 12, 40, 'j');
+    hl(g, 74, 50, 14, 'j');                                         // bras sur l'épaule
+    // gardien en uniforme, raide, mains levées à moitié
+    const sh = f % 2;                                               // tremblement
+    rect(g, 62, 38, 8, 8, 's'); rect(g, 60, 46, 12, 42, 'u');
+    vl(g, 56 + sh, 48, 12, 's'); vl(g, 76 - sh, 48, 12, 's');
+    px(g, 60, 46, 'k');                                             // insigne
+    // néon du couloir qui grésille
+    rect(g, 50, 4, 60, 3, f % 3 === 0 ? 'U' : 'w');
+  },
+
+  // l'émeute atteint la toiture
+  emeute_toit(g, f) {
+    rect(g, 0, 0, W, 44, 'N');
+    rect(g, 0, 70, W, 50, 'n'); rect(g, 0, 70, W, 4, 'k');          // mur
+    // bâtiment et toiture
+    rect(g, 16, 44, 128, 28, 'U'); rect(g, 16, 40, 128, 6, 'k');
+    for (let i = 0; i < 6; i++) rect(g, 24 + i * 20, 52, 8, 12, 'N');
+    // flammes sortant du toit et des fenêtres
+    for (let i = 0; i < 12; i++) {
+      const x = 20 + i * 11, h = 12 + ((i * 2 + f) % 4) * 6;
+      vl(g, x, 40 - h, h, 'f'); px(g, x, 40 - h - 2, 'y');
+      if ((i + f) % 3 === 0) vl(g, 24 + (i % 6) * 20, 44, 8, 'f');  // lueur fenêtres
+    }
+    // grosse colonne de fumée
+    for (let i = 0; i < 24; i++) px(g, 60 + ((i * 13 + f * 5) % 70), 4 + (i * 7 + f * 4) % 34, 'g');
+    // reflets rouges sur le mur
+    for (let x = 10; x < W; x += 22) rect(g, x + (f % 2), 76, 8, 4, 'J');
+  },
+
+  // Sorel arrache le combiné (acte II)
+  sorel_combine(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // mur de cellule, affiche réglementaire
+    rect(g, 0, 0, W, 88, 'n'); rect(g, 0, 88, W, 32, 'U'); hl(g, 0, 88, W, 'k');
+    rect(g, 108, 12, 30, 40, 'c'); hl(g, 112, 18, 22, 'k'); hl(g, 112, 24, 22, 'k'); hl(g, 112, 30, 14, 'k');
+    // main en orange qui serre le combiné
+    rect(g, 58, 44, 10, 8, 's');                                    // poing
+    rect(g, 44, 40, 18, 14, 'j');                                   // avant-bras détenu
+    rect(g, 64, 42, 26, 10, 'k');                                   // combiné
+    px(g, 66, 44, 'g'); px(g, 86, 44, 'g');
+    // fil qui pend et oscille vers le combiné mural arraché
+    const sw = f % 2;
+    rect(g, 90, 46 + sw, 4, 4, 'k');
+    for (let i = 0; i < 7; i++) px(g, 92 + sw + (i % 3), 50 + i * 5, 'k');
+    // débris au sol
+    px(g, 96, 96, 'g'); px(g, 104, 98, 'g'); rect(g, 100, 100, 6, 3, 'k');
+    // barreaux d'ombre au premier plan
+    for (let x = 10; x < W; x += 36) rect(g, x, 0, 5, H, 'k');
+  },
+
+  // fumée dans la coursive (acte III)
+  fumee_coursive(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // coursive : portes des deux côtés, grille du jour au fond
+    rect(g, 0, 0, W, 96, 'n'); rect(g, 0, 96, W, 24, 'U');
+    for (let i = 0; i < 3; i++) {
+      const x = 10 + i * 52;
+      rect(g, x, 20, 34, 76, 'N'); rect(g, x, 20, 34, 3, 'k');
+      for (let bx = 5; bx < 32; bx += 9) vl(g, x + bx, 23, 73, 'k');
+    }
+    rect(g, 132, 10, 20, 60, 'N');
+    for (let i = 0; i < 3; i++) vl(g, 136 + i * 6, 10, 60, 'k');
+    // jour sale au fond, obscurci par la fumée
+    rect(g, 66, 30, 26, 50, f % 2 ? 'a' : 'J');
+    // nappes de fumée qui rampent au plafond
+    for (let i = 0; i < 30; i++) {
+      const x = (i * 23 + f * 6) % W, y = 4 + (i * 5) % 22;
+      px(g, x, y, 'g'); if (i % 3) px(g, x + 1, y, 'g');
+    }
+    // gouttes de sueur/condensation sur les barreaux
+    for (let i = 0; i < 6; i++) px(g, 10 + i * 52 + 5, 40 + (f * 3 + i * 9) % 40, 'e');
+  },
+
+  // cellule sombre après une mort
+  cellule_sombre(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // porte de cellule entrouverte, tranche de lumière froide
+    rect(g, 58, 10, 44, 100, 'k');
+    rect(g, 62, 14, 36, 96, 'e'); rect(g, 64, 14, 8, 96, 'v');      // lumière du couloir
+    rect(g, 60, 10, 4, 100, 'g');
+    // couverture au sol, forme immobile
+    rect(g, 74, 92, 50, 14, 'u'); rect(g, 74, 92, 50, 3, 'n'); px(g, 78, 90, 's');
+    // goutte d'eau qui tombe du plafond (animée)
+    px(g, 40, 20 + (f * 9) % 60, 'e');
+    // barreaux d'ombre
+    for (let x = 8; x < W; x += 44) rect(g, x, 0, 5, H, 'k');
+  },
+
+  // ---------- FERRY : quai de la Joliette ----------
+
+  // ferry à quai la nuit, grues portuaires
+  ferry_quai(g, f) {
+    rect(g, 0, 0, W, 66, 'N');
+    rect(g, 0, 88, W, 32, 't');                                      // rade
+    for (let i = 0; i < 18; i++) px(g, (i * 19 + f * 4) % W, 90 + (i * 7 + f * 3) % 26, 'e'); // reflets
+    // grues portuaires à contre-jour
+    rect(g, 8, 18, 5, 50, 'k'); hl(g, 8, 18, 34, 'k'); vl(g, 40, 18, 10, 'k');
+    rect(g, 134, 24, 5, 44, 'k'); hl(g, 104, 24, 34, 'k');
+    // coque et superstructures du Méridional
+    rect(g, 22, 56, 118, 20, 'n'); rect(g, 22, 54, 118, 4, 'w');     // liseré
+    rect(g, 34, 36, 90, 20, 'n'); rect(g, 34, 36, 90, 3, 'g');
+    rect(g, 46, 24, 60, 12, 'n'); rect(g, 60, 18, 26, 6, 'k');       // passerelle + cheminée
+    // rangées de hublots allumés, un qui clignote
+    for (let i = 0; i < 12; i++) px(g, 38 + i * 9, 42, i === 5 ? (f % 2 ? 'a' : 'N') : 'a');
+    for (let i = 0; i < 14; i++) px(g, 26 + i * 8, 64, 'a');
+    // quai, containers, gyros qui tournent
+    rect(g, 0, 76, W, 12, 'U'); hl(g, 0, 76, W, 'k');
+    rect(g, 30, 66, 16, 10, 'o'); rect(g, 50, 68, 16, 8, 'u');
+    px(g, 148, 74, f % 2 ? 'r' : 'b'); px(g, 152, 74, f % 2 ? 'b' : 'r'); // gyrophares
+  },
+
+  // pont garage : silhouettes armées entre les voitures
+  pont_voitures(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    rect(g, 0, 0, W, 14, 'n');                                       // plafond bas
+    for (let i = 0; i < 5; i++) rect(g, 8 + i * 34, 6, 16, 3, f % 3 === 1 && i === 2 ? 'U' : 'a'); // néons
+    // rangées de voitures
+    for (let i = 0; i < 3; i++) voiture(g, 8 + i * 50, 78, ['u', 'o', 'n'][i], f, false);
+    for (let i = 0; i < 2; i++) voiture(g, 30 + i * 50, 96, ['n', 'u'][i], f, false);
+    // deux silhouettes cagoulées, lampe qui balaie
+    rect(g, 40, 46, 7, 7, 's'); rect(g, 38, 53, 11, 26, 'U'); px(g, 39, 48, 'k');
+    hl(g, 48, 58, 14, 'k'); px(g, 62, 57, 'y');                      // lampe torche
+    const beam = f % 2;
+    for (let i = 0; i < 5; i++) hl(g, 63 + i * 8, 55 - beam * 2 + i, 8, 'a'); // rayon
+    rect(g, 96, 44, 7, 7, 's'); rect(g, 94, 51, 11, 28, 'U'); px(g, 95, 46, 'k');
+    hl(g, 82, 56, 14, 'k');                                          // fusil pointé bas
+    // ligne de marquage au sol
+    for (let x = 0; x < W; x += 14) hl(g, x, 114, 8, 'g');
+  },
+
+  // Mira à la radio de la passerelle
+  mira_radio(g, f) {
+    rect(g, 0, 0, W, H, 'n');
+    // grandes vitres de la passerelle sur la rade
+    rect(g, 10, 8, 140, 46, 'N');
+    for (let i = 1; i < 5; i++) vl(g, 10 + i * 28, 8, 46, 'k');
+    for (let i = 0; i < 8; i++) px(g, 16 + (i * 17 + f * 3) % 130, 12 + (i * 11 + f * 2) % 40, 'e'); // pluie sur les vitres
+    // console : écrans et voyants
+    rect(g, 10, 70, 140, 34, 'U'); rect(g, 10, 70, 140, 4, 'k');
+    for (let i = 0; i < 4; i++) rect(g, 20 + i * 26, 76, 18, 10, i === 2 && f % 2 ? 'N' : 'b');
+    for (let i = 0; i < 10; i++) px(g, 22 + i * 12, 92, [f % 2 ? 'r' : 'G', 'a', 'g'][i % 3]);
+    // Mira de profil, combiné à l'oreille
+    rect(g, 72, 34, 9, 9, 's'); rect(g, 70, 26, 13, 8, 'H');         // cheveux courts
+    rect(g, 68, 43, 16, 30, 'u');
+    vl(g, 82, 44, 12, 's'); px(g, 83, 42 + (f % 2), 'k');            // combiné
+    // la rade par la fenêtre : un gyrophare lointain
+    px(g, 40, 44, f % 2 ? 'r' : 'b');
+  },
+
+  // charge explosive et son minuteur
+  minuteur(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // fond : tôle de coque rivetée
+    rect(g, 0, 0, W, H, 'n');
+    for (let y = 10; y < H; y += 24) { hl(g, 0, y, W, 'U'); for (let x = 8; x < W; x += 16) px(g, x, y - 2, 'g'); }
+    // bloc de charge sanglé à un longeron
+    rect(g, 60, 40, 44, 34, 'J'); rect(g, 60, 40, 44, 4, 'k'); rect(g, 60, 70, 44, 4, 'k');
+    vl(g, 58, 36, 42, 'g'); vl(g, 104, 36, 42, 'g');                 // sangles
+    // minuteur : chiffres lumineux qui défilent
+    rect(g, 66, 46, 32, 16, 'k');
+    rect(g, 68, 49, 9, 10, 'N'); rect(g, 85, 49, 9, 10, 'N');
+    px(g, 71, 51, 'r'); vl(g, 71, 51, 6, 'r'); px(g, 74, 51, 'r');   // chiffre 2
+    px(g, 88, 51, 'r'); px(g, 91, 54, 'r'); px(g, 88, 57, 'r');
+    px(g, 81, 51 + (f % 2), 'r'); px(g, 81, 57 - (f % 2), 'r');      // deux-points clignotant
+    // fils vers le détonateur
+    hl(g, 74, 78, 22, 'y'); vl(g, 96, 74, 5, 'y');
+    vl(g, 70, 78, 8, 'r'); px(g, 70, 86, 'k');
+    // voyant rouge qui pulse
+    px(g, 108, 44, f % 2 ? 'r' : 'k');
+  },
+
+  // la houle se lève contre la coque (acte II)
+  houle_pont(g, f) {
+    rect(g, 0, 0, W, 52, 'N');
+    // pluie fine de travers
+    for (let i = 0; i < 30; i++) { const x = (i * 29 + f * 7) % W, y = (i * 13 + f * 11) % 60; vl(g, x, y, 3, 'e'); }
+    // vagues qui montent/descendent contre la muraille de coque
+    const swell = f % 3;
+    rect(g, 0, 52 - swell * 2, W, 68, 't');
+    for (let i = 0; i < 8; i++) {
+      const x = (i * 22 + f * 5) % (W + 20) - 10, y = 52 - swell * 2 - (i % 2) * 3;
+      rect(g, x, y, 14, 4, 'e');                                     // crêtes blanches
+    }
+    // flanc de coque sombre qui tangue
+    rect(g, 0, 70 + swell, W, 50, 'n'); hl(g, 0, 70 + swell, W, 'g');
+    for (let i = 0; i < 10; i++) px(g, 14 + i * 15, 78 + swell, 'a');
+    // amarres tendues vers le quai invisible
+    hl(g, 20, 88, 30, 'k'); hl(g, 110, 92, 34, 'k');
+    px(g, 20, 88, 'r'); px(g, 144, 92, 'r');                         // feux de position
+  },
+
+  // Ansel reprend le combiné (acte III)
+  ansel_combine(g, f) {
+    rect(g, 0, 0, W, H, 'N');
+    // cabine sombre, veilleuse froide
+    rect(g, 0, 0, W, 92, 'n'); rect(g, 0, 92, W, 28, 'U'); hl(g, 0, 92, W, 'k');
+    rect(g, 118, 18, 24, 16, 'b'); px(g, 128, 24, 'v');              // écran bleuté
+    // profil sévère penché sur la console radio
+    rect(g, 56, 30, 10, 10, 's'); rect(g, 54, 26, 14, 6, 'H');       // cheveux tirés
+    rect(g, 50, 40, 20, 34, 'U');
+    vl(g, 70, 46, 14, 's'); rect(g, 71, 44, 20, 9, 'k');             // bras + combiné
+    // console : fréquence qui défile
+    rect(g, 30, 74, 104, 18, 'k');
+    for (let i = 0; i < 8; i++) px(g, 36 + i * 12, 80, i === (f % 8) ? 'r' : 'G');
+    hl(g, 36, 86, 92, 'U'); px(g, 40 + (f % 12) * 7, 86, 'a');       // curseur
+    // cendrier, fumée de cigarette
+    rect(g, 14, 86, 8, 4, 'g');
+    for (let i = 0; i < 4; i++) px(g, 18 + (f % 2), 82 - i * 4 - (f % 3), 'g');
+  },
+
+  // porte latérale ouverte, passager sur la passerelle
+  passerelle(g, f) {
+    rect(g, 0, 0, W, 60, 'N');
+    rect(g, 0, 88, W, 32, 't');                                      // eau noire
+    for (let i = 0; i < 12; i++) px(g, (i * 23 + f * 4) % W, 90 + (i * 7 + f * 3) % 26, 'e');
+    // flanc du ferry, porte ouverte pleine de lumière
+    rect(g, 0, 30, W, 60, 'n'); hl(g, 0, 30, W, 'g');
+    rect(g, 60, 36, 30, 52, 'a'); rect(g, 60, 36, 30, 3, 'y');       // lumière intérieure
+    // passerelle inclinée vers le quai
+    rect(g, 24, 88, 40, 5, 'g'); hl(g, 24, 87, 40, 'k');             // planche vers la gauche
+    vl(g, 28, 88, 12, 'k'); vl(g, 60, 88, 4, 'k');
+    // passager qui descend, mains sur la tête (bras remuent)
+    const st = f % 2;
+    rect(g, 46 - st * 2, 72, 7, 6, 's'); rect(g, 44 - st * 2, 78, 11, 10, 'o');
+    vl(g, 42 - st * 2, 74, 4, 's'); vl(g, 55 - st * 2, 74, 4, 's');
+    // projecteurs braqués depuis le quai
+    for (let i = 0; i < 6; i++) hl(g, 96 + i * 6, 84 - i * 7, 4, 'y');
+    px(g, 100, 90, 'r'); px(g, 104, 90, f % 2 ? 'b' : 'r');
+  },
 };
 
 export const CUT_ARTS = Object.keys(ARTS);

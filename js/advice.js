@@ -25,7 +25,7 @@ export function adviceFor(state, seen = {}) {
     {
       key: 'presse',
       ok: state.pressure >= 8,
-      text: () => `La presse est à ${state.pressure}/10. À 10, le préfet ordonne l'assaut. Si ça doit arriver, préparez l'équipe (renseignement, tireur).`,
+      text: () => `La presse est à ${state.pressure}/10. À ${state.assaultAt || 10}, le préfet ordonne l'assaut. Si ça doit arriver, préparez l'équipe (renseignement, tireur).`,
     },
     // 3. Demande majeure en attente (l'ultimatum Terreur donne menace +2
     //    tant qu'elle pend → « l'échauffe » est exact).
